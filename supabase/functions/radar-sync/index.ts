@@ -55,7 +55,8 @@ async function buscar(palavraId?: string) {
     const run = await apify(`/acts/${ACTOR}/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ startUrls: [{ url: urlBiblioteca(p.termo) }], resultsLimit: p.limite, activeStatus: 'active' }),
+      // sorting total_impressions: os anúncios com mais impressões (os mais escalados) vêm primeiro
+      body: JSON.stringify({ startUrls: [{ url: urlBiblioteca(p.termo) }], resultsLimit: p.limite, activeStatus: 'active', sorting: 'total_impressions' }),
     })
     const id = run?.data?.id
     if (!id) continue
