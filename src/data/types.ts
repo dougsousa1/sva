@@ -143,3 +143,46 @@ export interface ContaAnuncio {
   status: 'ativa' | 'restrita' | 'desativada'
   limiteDiario: number
 }
+
+// ---------------------------------------------------------------- Radar (Biblioteca de Anúncios)
+export interface RadarPalavra {
+  id: string
+  termo: string
+  ofertaId: string | null
+  ativo: boolean
+  limite: number
+  ultimaBusca: string | null
+}
+
+export type RadarStatus = 'novo' | 'salvo' | 'descartado' | 'modelado'
+
+export interface RadarAnuncio {
+  id: string // ID do anúncio na Biblioteca
+  palavraId: string | null
+  termo: string
+  ofertaId: string | null
+  paginaNome: string
+  paginaFoto: string | null
+  titulo: string | null
+  texto: string
+  cta: string | null
+  link: string | null
+  imagemUrl: string | null
+  videoUrl: string | null
+  inicio: string | null
+  ativo: boolean
+  variacoes: number
+  plataformas: string[]
+  preco: number | null
+  whatsapp: boolean
+  nota: number
+  status: RadarStatus
+}
+
+export interface RadarExecucao {
+  id: string
+  termo: string
+  status: 'rodando' | 'concluida' | 'falhou'
+  itens: number | null
+  iniciadoEm: string
+}

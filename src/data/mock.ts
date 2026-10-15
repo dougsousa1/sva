@@ -12,6 +12,9 @@ import type {
   Despesa,
   InsightDia,
   Oferta,
+  RadarAnuncio,
+  RadarExecucao,
+  RadarPalavra,
   Venda,
 } from './types'
 
@@ -414,3 +417,46 @@ export const aprendizados: Aprendizado[] = [
     decisao: 'Manter os dois e testar novas aberturas a cada 10 dias.', veredito: 'neutro',
   },
 ]
+
+// ---------------------------------------------------------------- Radar (demonstração)
+export const radarPalavras: RadarPalavra[] = [
+  { id: 'RP-1', termo: 'intestino inchado', ofertaId: 'OF02', ativo: true, limite: 20, ultimaBusca: day(LAST) },
+  { id: 'RP-2', termo: 'receitas airfryer', ofertaId: 'OF01', ativo: true, limite: 20, ultimaBusca: day(LAST) },
+  { id: 'RP-3', termo: 'foto com santo', ofertaId: 'OF03', ativo: true, limite: 20, ultimaBusca: day(LAST) },
+  { id: 'RP-4', termo: 'novena', ofertaId: null, ativo: true, limite: 20, ultimaBusca: day(LAST - 1) },
+  { id: 'RP-5', termo: 'chá emagrecedor', ofertaId: null, ativo: false, limite: 20, ultimaBusca: null },
+]
+export const radarExecucoes: RadarExecucao[] = []
+
+const paginasRadar = ['Dra. Ana Nutri', 'Cozinha Prática', 'Fé e Devoção', 'Vida Leve Oficial', 'Receitas da Vó', 'Intestino em Paz', 'Santos e Milagres', 'Emagrece Já', 'Novena Poderosa', 'Barriga Zero']
+const textosRadar: Record<string, string[]> = {
+  'RP-1': ['Barriga estufada depois de comer? Esse protocolo de 7 dias resolveu o meu intestino. Apenas R$ 19,90, chama no WhatsApp 👇', 'SIBO não é frescura. Guia completo + cardápio por R$ 27', 'Você sente gases e inchaço todo dia? Descubra o método natural (R$ 14,90)'],
+  'RP-2': ['+200 receitas na AirFryer sem óleo por apenas R$ 9,90', 'Pare de errar o ponto do frango na AirFryer. E-book com 150 receitas R$ 12,90', 'Marmitas da semana na AirFryer em 1 hora — R$ 17'],
+  'RP-3': ['Receba sua foto ao lado de Nossa Senhora em 5 minutos! Só R$ 9,90', 'Presente de fé que emociona: sua foto com São Jorge', 'Mamãe chorou quando recebeu! Foto com o santo de devoção R$ 12'],
+  'RP-4': ['Novena de 9 dias direto no seu WhatsApp. Áudios de oração guiada R$ 7', 'Novena das Mãos Ensanguentadas — receba todo dia no WhatsApp', 'Comece hoje sua novena e receba sua graça (R$ 9,90)'],
+}
+export const radarAnuncios: RadarAnuncio[] = []
+{
+  let n = 0
+  for (const p of radarPalavras.filter((x) => textosRadar[x.id])) {
+    for (let k = 0; k < 5; k++) {
+      const texto = textosRadar[p.id][k % 3]
+      const dias = int(3, 120)
+      const variacoes = int(1, 9)
+      const whatsapp = rnd() < 0.7
+      const m = texto.match(/R\$\s?(\d+(?:,\d{2})?)/)
+      const preco = m ? Number(m[1].replace(',', '.')) : null
+      let nota = Math.min(40, (dias / 60) * 40) + Math.min(25, (variacoes - 1) * 5) + (whatsapp ? 20 : 0) + 5 + (preco && preco >= 7 && preco <= 97 ? 10 : 0)
+      nota = Math.round(nota)
+      radarAnuncios.push({
+        id: `${1300000000000 + n * 7919}`, palavraId: p.id, termo: p.termo, ofertaId: null,
+        paginaNome: paginasRadar[(n * 3) % paginasRadar.length], paginaFoto: null, titulo: null, texto,
+        cta: whatsapp ? 'Enviar mensagem' : 'Saiba mais', link: whatsapp ? 'https://wa.me/55' : null, imagemUrl: null, videoUrl: null,
+        inicio: day(Math.max(0, LAST - dias)), ativo: true, variacoes, plataformas: ['FACEBOOK', 'INSTAGRAM'], preco, whatsapp, nota,
+        status: n % 9 === 4 ? 'salvo' : 'novo',
+      })
+      n++
+    }
+  }
+  radarAnuncios.sort((a, b) => b.nota - a.nota)
+}

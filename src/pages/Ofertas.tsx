@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { ExternalLink, Lightbulb, Plus, Sparkles, Target, X } from 'lucide-react'
 import { useMemo, useState, type DragEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { aprendizados, chips, criativos, ofertas } from '../data/mock'
 import type { Oferta, OfertaStatus } from '../data/types'
@@ -159,20 +160,11 @@ export default function Ofertas() {
         <NovaOferta
           onClose={() => setNova(false)}
           onSalvar={async (o) => {
-            if (modoDados === 'live' && supabase) {
-              const { error } = await supabase.from('ofertas').insert({
-                id: o.id, nome: o.nome, nicho: o.nicho, ticket: o.ticket, status: o.status, cor: o.cor,
-                promessa: o.promessa, angulo: o.angulo, produto_origem: o.produtoOrigem, fonte_validacao: o.fonteValidacao,
-              })
-              if (error) return error.message
-              setNova(false)
-              await recarregar()
-              return
-            }
-            ofertas.push(o)
-            rebuildIndexes()
+            const err = await criarOferta(o)
+            if (err) return err
             setNova(false)
-            setTick((t) => t + 1)
+            if (modoDados === 'live') await recarregar()
+            else setTick((t) => t + 1)
           }}
         />
       )}
@@ -353,12 +345,33 @@ function Info({ icon: Icon, label, v }: { icon: typeof Target; label: string; v:
 
 const cores = ['#22d3ee', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#38bdf8', '#c084fc', '#a3e635', '#f472b6', '#2dd4bf']
 
-function NovaOferta({ onClose, onSalvar }: { onClose: () => void; onSalvar: (o: Oferta) => Promise<string | void> }) {
+/** Grava uma oferta nova (Supabase no modo ao vivo; memória na demonstração). */
+export async function criarOferta(o: Oferta): Promise<string | void> {
+  if (supabase) {
+    const { error } = await supabase.from('ofertas').insert({
+      id: o.id, nome: o.nome, nicho: o.nicho, ticket: o.ticket, status: o.status, cor: o.cor,
+      promessa: o.promessa, angulo: o.angulo, produto_origem: o.produtoOrigem, fonte_validacao: o.fonteValidacao,
+    })
+    if (error) return error.message
+    return
+  }
+  ofertas.push(o)
+  rebuildIndexes()
+}
+
+type Inicial = Partial<{ nome: string; nicho: string; ticket: string; promessa: string; angulo: string; produtoOrigem: string; fonteValidacao: string }>
+
+export function NovaOferta({ onClose, onSalvar, inicial, titulo = 'Nova oferta' }: {
+  onClose: () => void
+  onSalvar: (o: Oferta) => Promise<string | void>
+  inicial?: Inicial
+  titulo?: string
+}) {
   const proximo = useMemo(() => {
     const n = Math.max(0, ...ofertas.map((o) => Number(o.id.replace(/\D/g, '')) || 0)) + 1
     return `OF${String(n).padStart(2, '0')}`
   }, [])
-  const [f, setF] = useState({ nome: '', nicho: '', ticket: '', promessa: '', angulo: '', produtoOrigem: '', fonteValidacao: '', status: 'ideia' as OfertaStatus })
+  const [f, setF] = useState({ nome: '', nicho: '', ticket: '', promessa: '', angulo: '', produtoOrigem: '', fonteValidacao: '', ...inicial, status: 'ideia' as OfertaStatus })
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const ticket = Number(f.ticket.replace(',', '.')) || 0
@@ -369,7 +382,7 @@ function NovaOferta({ onClose, onSalvar }: { onClose: () => void; onSalvar: (o: 
       <input id={`of-${k}`} className={input} value={f[k]} placeholder={ph} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
     </label>
   )
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
       <form
         className="panel panel-glow w-full max-w-lg p-6"
@@ -388,7 +401,7 @@ function NovaOferta({ onClose, onSalvar }: { onClose: () => void; onSalvar: (o: 
         }}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h3 className="font-display text-lg font-semibold">Nova oferta <span className="num ml-1 text-sm text-cyan">{proximo}</span></h3>
+          <h3 className="font-display text-lg font-semibold">{titulo} <span className="num ml-1 text-sm text-cyan">{proximo}</span></h3>
           <button type="button" onClick={onClose} className="text-ink-3 hover:text-ink"><X size={18} /></button>
         </div>
         <div className="space-y-3.5">
@@ -418,6 +431,7 @@ function NovaOferta({ onClose, onSalvar }: { onClose: () => void; onSalvar: (o: 
         </button>
         <p className="mt-2.5 text-center text-[11px] text-ink-3">Use o código <span className="num text-cyan">[{proximo}]</span> no nome das campanhas desta oferta no Meta.</p>
       </form>
-    </div>
+    </div>,
+    document.body,
   )
 }

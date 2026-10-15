@@ -9,6 +9,7 @@ import {
   Loader2,
   LogOut,
   Megaphone,
+  Radar,
   Receipt,
   RefreshCw,
   Settings,
@@ -26,6 +27,7 @@ import { Segmented } from './ui'
 const nav = [
   { to: '/', label: 'Painel', icon: LayoutDashboard },
   { to: '/ofertas', label: 'Ofertas', icon: Lightbulb },
+  { to: '/radar', label: 'Radar', icon: Radar },
   { to: '/criativos', label: 'Criativos', icon: Clapperboard },
   { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
   { to: '/chips', label: 'Chips & Aparelhos', icon: Smartphone },

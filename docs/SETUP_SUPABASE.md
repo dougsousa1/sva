@@ -78,3 +78,17 @@ A tela "Webhooks de entrada" da Leona serve para **receber** dados, não para en
 ⚠️ **Nunca** mande a `secret` / `service_role` key nem o token do Meta.
 
 Com isso eu configuro o sistema, publico na Vercel e te mando o link com login.
+
+---
+
+## 9. Radar de ofertas (Apify)
+1. Crie a conta grátis em **apify.com** (US$ 5 de crédito por mês).
+2. No Apify: **Settings → API & Integrations** → copie o **Personal API token**.
+3. Na **Apify Store**, abra **Facebook Ads Library Scraper** (do próprio Apify, `apify/facebook-ads-scraper`) e clique em **Try for free** uma vez.
+4. Supabase → **SQL Editor**: rode [`supabase/migrations/0003_radar.sql`](../supabase/migrations/0003_radar.sql).
+5. **Edge Functions → Secrets**: `APIFY_TOKEN` = o token do Apify.
+6. **Edge Functions → Deploy a new function → Via Editor**, nome `radar-sync`, código de [`supabase/functions/radar-sync/index.ts`](../supabase/functions/radar-sync/index.ts). Desligue **Verify JWT**.
+7. **Integrations → Cron → Create job**: nome `radar-sync`, agendamento `0 * * * *`, Edge Function `radar-sync` (POST), header `x-sync-secret` = seu `SYNC_SECRET`, body `{"acao": "auto"}`.
+   Ele baixa as coletas prontas e, 1x por dia, busca de novo cada palavra-chave ativa.
+
+Custo: cada palavra busca até 20 anúncios por dia (ajustável). Acompanhe em **Apify → Billing** depois da primeira semana.

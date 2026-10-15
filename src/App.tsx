@@ -10,6 +10,7 @@ import Criativos from './pages/Criativos'
 import Dashboard from './pages/Dashboard'
 import Despesas from './pages/Despesas'
 import Ofertas from './pages/Ofertas'
+import Radar from './pages/Radar'
 import Vendas from './pages/Vendas'
 
 // Dentro de um iframe (ex.: prévia no app do Claude) a URL não pode mudar, então a navegação fica em memória.
@@ -32,6 +33,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="ofertas" element={<Ofertas />} />
+            <Route path="radar" element={<Radar />} />
             <Route path="criativos" element={<Criativos />} />
             <Route path="campanhas" element={<Campanhas />} />
             <Route path="chips" element={<Chips />} />
