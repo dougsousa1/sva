@@ -1,6 +1,6 @@
 # SVA — Plano de Organização do Sistema (para aprovação)
 
-> Status: **rascunho para aprovação**. Nada foi construído ainda. Este documento define *o que* o sistema vai controlar, *de onde* vêm os dados e *como* tudo se conecta. Depois de aprovado, viramos isso no sistema completo.
+> Status: **v2 — revisado com as respostas do dono (ver seção 11)**. Nada foi construído ainda. Este documento define *o que* o sistema vai controlar, *de onde* vêm os dados e *como* tudo se conecta. Depois de aprovado, viramos isso no sistema completo.
 
 ---
 
@@ -75,14 +75,15 @@ CUSTOS que entram em cada camada:
 
 ### 4.5 Chips & Aparelhos (o ponto fraco da operação)
 - **Chip**: número, operadora, custo (ex.: R$ 15), data de compra, data de ativação, **data em que caiu**, motivo (ban, restrição, desconexão), aparelho onde está, conexão na Leona, oferta que atende.
-- **Aparelho (celular)**: modelo, custo de compra, data de compra, vida útil estimada (para rateio), chips que já rodou.
+- **Aparelho (celular)**: modelo, apelido, chips que já rodou. *Sem rateio de custo* — a compra do celular entra como despesa pontual no mês em que foi paga (decisão do dono).
 - Métricas por chip: **vida útil (dias)**, conversas recebidas, vendas, receita, **receita antes de cair**, custo do chip por venda.
 - Métricas gerais: média de dias até cair, % de chips caídos por semana, custo mensal com reposição de chips.
 
 ### 4.6 Despesas (lançamento de custos)
 - Categorias: **Tráfego** (automático via Meta), **Chips**, **Aparelhos**, **Plataforma Leona**, **Ferramentas de IA**, **Outros** (VPS, domínio, freelancer, impostos, taxas de pagamento).
-- Tipo: **pontual** (compra de chip), **recorrente** (mensalidade Leona) ou **ativo com depreciação** (celular).
-- Pode ser vinculada a uma oferta/chip/aparelho específico ou ficar como **custo geral** (rateado).
+- **Imposto do Meta (13%)**: calculado automaticamente sobre o gasto que a API retorna (a API do Meta informa o gasto **sem** o imposto). Percentual configurável.
+- Tipo: **pontual** (compra de chip, celular) ou **recorrente mensal** (Leona, ferramentas de IA).
+- Pode ser vinculada a uma oferta/chip específico ou ficar como **custo fixo mensal** — custos fixos **não são rateados** entre ofertas; entram só no resultado do mês.
 
 ### 4.7 Vendas
 - Importadas da Leona (automático), com produto, valor, chip, DDD, anúncio de origem.
@@ -99,10 +100,10 @@ CUSTOS que entram em cada camada:
 | Fonte | Como | O que traz | Frequência |
 |---|---|---|---|
 | **Meta Marketing API** | Token de usuário do sistema (Business Manager) + `ad account id` | Estrutura campanha/conjunto/anúncio, criativos, gasto, impressões, cliques, conversas iniciadas (`onsite_conversion.messaging_conversation_started_7d`) | A cada 1h + fechamento diário |
-| **Leona** | MCP (já conectado) e/ou API/webhook da Leona para automação contínua | Vendas (`source_id`, chip, produto, valor), produtos, status das conexões | A cada 15–60 min |
+| **Leona — Webhook** | Leona envia cada venda/evento para o sistema | Venda em **tempo real** (`source_id`, chip, produto, valor) | Instantâneo |
+| **Leona — MCP** | Conciliação e consultas | Produtos, status das conexões (detectar chip caído), conferência diária das vendas | A cada 15–60 min + diário |
+| **Telegram** | Bot próprio | Alertas e resumo diário | Instantâneo / 1× por dia |
 | **Lançamento manual** | Formulário no sistema | Chips, celulares, mensalidades, outros custos, aprendizados | Quando acontecer |
-
-> ⚠️ Ponto a confirmar: o MCP da Leona funciona muito bem para consultas via Claude, mas para o sistema sincronizar **sozinho** 24h precisamos de um token de API ou webhook da Leona (ver perguntas na seção 10).
 
 ---
 
@@ -110,15 +111,23 @@ CUSTOS que entram em cada camada:
 
 **Atribuição de venda:** `venda.source_id` = `anúncio.id` do Meta → venda pertence àquele anúncio → criativo → conjunto → campanha → oferta → produto.
 
-**Custo real de cada oferta no dia =**
-1. **Tráfego**: gasto exato dos anúncios dela (Meta).
+O resultado é medido em **dois níveis**:
+
+**Nível 1 — Margem de cada oferta (custos variáveis):**
+1. **Tráfego com imposto**: gasto dos anúncios dela no Meta × **1,13** (13% de imposto).
 2. **Chips**: custo do chip ÷ dias de vida do chip, alocado à oferta que o chip atendeu. (Chip de R$ 15 que durou 5 dias = R$ 3/dia.) Enquanto o chip está vivo, usa a média histórica de vida útil como estimativa e recalcula quando ele cair.
-3. **Aparelhos**: custo do celular depreciado (ex.: em 6 meses) e rateado entre os chips/ofertas que usaram o aparelho.
-4. **Plataformas e custos gerais** (Leona, IA, etc.): mensalidade ÷ dias do mês, rateado entre as ofertas **proporcional à receita** (ou ao gasto com tráfego — escolher na aprovação).
+
+`Margem da oferta = receita − tráfego c/ imposto − chips`
+
+**Nível 2 — Resultado do mês (empresa):**
+
+`Lucro líquido do mês = soma das margens − custos fixos mensais (Leona, IA…) − despesas pontuais (celulares etc.)`
+
+Mensalidades de sistema e celulares **não** são divididos entre ofertas — aparecem só no resultado do mês, junto com o **ponto de equilíbrio**: "quanto de margem preciso por dia para pagar os fixos".
 
 **Métricas principais:**
-- **Lucro líquido** = receita − (tráfego + chips + aparelhos + plataformas + outros)
-- **ROAS** = receita ÷ tráfego · **ROI real** = lucro ÷ custo total
+- **Margem da oferta** e **Lucro líquido do mês** (acima)
+- **ROAS** = receita ÷ tráfego c/ imposto · **ROI real** = lucro ÷ custo total
 - **CPA** = custo total ÷ vendas · **Custo por conversa** = tráfego ÷ conversas iniciadas
 - **Taxa de conversão do WhatsApp** = vendas ÷ conversas iniciadas
 - **Receita por chip** e **vida útil média do chip**
@@ -135,7 +144,9 @@ CUSTOS que entram em cada camada:
 - 🟢 **Oportunidade de escala**: ROAS acima da meta por 3 dias → sugerir duplicar/subir orçamento.
 - 🟠 **Estoque de chips baixo** (menos de N chips reserva).
 
-Canal dos alertas: painel + WhatsApp/Telegram/e-mail (a definir).
+- 🔴 **Conta de anúncio com problema** (restrita/desativada, limite de gasto atingido, pagamento recusado).
+
+Canal dos alertas: painel + **bot do Telegram**. Além dos alertas, o bot manda um **resumo diário** (ex.: 23h): receita, gasto c/ imposto, margem, melhores/piores ofertas, chips que caíram.
 
 ---
 
@@ -149,11 +160,13 @@ meta_campanhas      (id_meta, nome, objetivo, status, conta_anuncio)
 meta_conjuntos      (id_meta, campanha_id, nome, orcamento_diario, status)
 meta_anuncios       (id_meta, conjunto_id, criativo_id, oferta_id, nome, status)
 meta_insights_dia   (anuncio_id, data, gasto, impressoes, cliques, conversas, ...)
-aparelhos           (id, modelo, custo, data_compra, meses_depreciacao, status)
+contas_anuncio      (id_meta, nome, status, limite_gasto, bm)
+aparelhos           (id, modelo, apelido, status)
 chips               (id, numero, operadora, custo, data_compra, data_ativacao, data_queda,
                      motivo_queda, aparelho_id, leona_connection_id, oferta_id)
-despesas            (id, categoria, descricao, valor, data, tipo[pontual|recorrente|ativo],
+despesas            (id, categoria, descricao, valor, data, tipo[pontual|recorrente_mensal],
                      oferta_id?, chip_id?, aparelho_id?)
+configuracoes       (imposto_meta_pct = 13, horario_resumo_telegram, ...)
 vendas              (id_leona, data, valor, produto_leona_id, oferta_id, anuncio_meta_id,
                      chip_id, lead_ddd, origem)
 aprendizados        (id, oferta_id?, criativo_id?, hipotese, acao, resultado, decisao, data)
@@ -163,7 +176,7 @@ aprendizados        (id, oferta_id?, criativo_id?, hipotese, acao, resultado, de
 
 ## 9. Stack proposta e fases
 
-**Stack sugerida:** Supabase (banco Postgres + login + cron) · Next.js hospedado na Vercel · rotinas de sincronização agendadas (Meta + Leona). Ambos já têm conector disponível nesta conta, o que acelera a implantação.
+**Stack sugerida:** Supabase (banco Postgres + login + cron) · Next.js hospedado na Vercel · rotinas de sincronização agendadas (Meta + Leona) · endpoint de webhook para a Leona · bot do Telegram. Usuário único (só o dono), com login simples — sem perfis/permissões.
 
 | Fase | Entrega | Resultado |
 |---|---|---|
@@ -174,13 +187,35 @@ aprendizados        (id, oferta_id?, criativo_id?, hipotese, acao, resultado, de
 
 ---
 
-## 10. Perguntas para aprovarmos antes de construir
+## 10. Padrão de nomes no Meta (obrigatório para o sistema funcionar bem)
 
-1. **Estrutura "ABO em três"**: é 1 campanha → 3 conjuntos → 1 anúncio cada (1-3-1), ou 1-3-3? Quantas contas de anúncio vocês usam?
-2. **Acesso ao Meta**: vocês têm Business Manager com **usuário do sistema** para gerar token permanente? Quais IDs de conta de anúncio?
-3. **Leona**: além do MCP, existe **token de API ou webhook** de venda para sincronização automática 24h?
-4. **Rateio dos custos gerais** (Leona, IA): proporcional à **receita** ou ao **gasto com tráfego** de cada oferta?
-5. **Celular**: depreciar em quantos meses? (sugestão: 6)
-6. **Quem usa o sistema** e precisa de login? Alguém só pode ver e não editar?
-7. Onde querem receber **alertas** (WhatsApp, Telegram, e-mail)?
-8. Há outros custos fixos que não citei (VPS, proxy, contingência de BM/perfis, freelancer de criativo, imposto)?
+Como tudo roda na mesma conta de anúncio, o **nome** é o que separa as ofertas. Padrão sugerido:
+
+```
+Campanha:  [OF02] INTESTINO-LEVE | ABO | C01 | 2026-10-15
+Conjunto:  [OF02] C01 | CJ1 | <público>
+Anúncio:   [OF02] CR014 v2 | <gancho curto>
+```
+
+- `OF02` = código da oferta no sistema · `CR014` = código do criativo · `v2` = versão.
+- O sistema lê o código entre colchetes e liga a campanha/anúncio à oferta e ao criativo **automaticamente**. Anúncio fora do padrão aparece como "sem vínculo" para corrigir com 1 clique.
+- Não é preciso renomear o que já está rodando: o sistema permite vincular manualmente os anúncios antigos.
+
+---
+
+## 11. Decisões aprovadas (respostas do dono)
+
+| # | Tema | Decisão | Impacto no sistema |
+|---|---|---|---|
+| 1 | Estrutura ABO | Mesma conta de anúncio para todas as ofertas | Vínculo oferta↔campanha pelo padrão de nomes (seção 10). Suporte a **várias contas** já previsto para contingência. |
+| 2 | API do Meta | Dono gera token (usuário do sistema no BM) | Sincronização automática de gasto, conversas e estrutura. |
+| 3 | Leona | MCP + Webhook disponíveis | Vendas em tempo real via webhook; MCP para conciliação e status dos chips. |
+| 4 | Mensalidades | Gasto fixo mensal, **não** dividir por oferta | Dois níveis: margem por oferta e lucro do mês (seção 6). |
+| 5 | Celular | Já pago (Pix) | Despesa pontual no mês da compra, sem depreciação. |
+| 6 | Usuários | Só o dono | Login único, sem perfis. |
+| 7 | Alertas | Telegram | Bot com alertas + resumo diário. |
+| 8 | Outros custos | Só imposto do Meta de **13%** | Aplicado automaticamente sobre o gasto do Meta (configurável). |
+
+### Pendente
+- Confirmar se a estrutura é **1-3-1** (1 campanha → 3 conjuntos → 1 anúncio em cada).
+- Para construir: token do Meta + ID da conta de anúncio, URL/segredo do webhook da Leona, bot do Telegram (criado no @BotFather) e projeto no Supabase.
