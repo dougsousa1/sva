@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { isoDate } from '../lib/date'
 import { rebuildIndexes } from '../lib/metrics'
 import { ofertaPeloNome } from '../lib/vinculo'
-import { aparelhos, aprendizados, campanhas, chips, contas, criativos, despesas, insights, ofertas, radarAnuncios, radarExecucoes, radarPalavras, vendas } from './mock'
+import { aparelhos, aprendizados, campanhas, chips, contas, criativos, despesas, insights, insightsIA, ofertas, radarAnuncios, radarExecucoes, radarPalavras, vendas } from './mock'
 import type { Campanha, Chip, MetaStatus, OfertaStatus } from './types'
 
 // deno-style "any" para as linhas cruas do banco
@@ -52,7 +52,7 @@ export async function carregarAoVivo(sb: SupabaseClient): Promise<{ imposto: num
   trocar(criativos, cr.map((c) => ({
     id: c.id, ofertaId: c.oferta_id, tipo: c.tipo, gancho: c.gancho, versao: c.versao, ferramenta: c.ferramenta ?? '',
     duracao: c.duracao ?? undefined, thumbnailUrl: c.thumbnail_url, imagemUrl: c.imagem_url ?? null,
-    videoUrl: c.video_url ?? null, previewLink: c.preview_link ?? null, criadoEm: c.criado_em,
+    videoUrl: c.video_url ?? null, previewLink: c.preview_link ?? null, texto: c.texto ?? null, criadoEm: c.criado_em,
   })))
   trocar(contas, ct.map((c) => ({ id: c.id, nome: c.nome, status: c.status, limiteDiario: num(c.limite_diario) })))
 
@@ -117,6 +117,8 @@ export async function carregarAoVivo(sb: SupabaseClient): Promise<{ imposto: num
     ativo: !!a.ativo, variacoes: a.variacoes ?? 1, plataformas: a.plataformas ?? [], preco: a.preco === null ? null : num(a.preco),
     whatsapp: !!a.whatsapp, nota: a.nota ?? 0, status: a.status,
   })))
+  const ii = await tudo(sb, 'insights_ia', 'criado_em').catch(() => [] as Row[])
+  trocar(insightsIA, ii.map((i) => ({ id: i.id, ofertaId: i.oferta_id, criadoEm: i.criado_em, resultado: i.resultado })))
   trocar(radarExecucoes, re.map((e) => ({ id: e.id, termo: e.termo, status: e.status, itens: e.itens, erro: e.erro, iniciadoEm: e.iniciado_em })))
   rebuildIndexes()
   const imp = cfg.find((c) => c.chave === 'imposto_meta')?.valor

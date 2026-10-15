@@ -12,6 +12,7 @@ import type {
   Despesa,
   InsightDia,
   Oferta,
+  InsightIA,
   RadarAnuncio,
   RadarExecucao,
   RadarPalavra,
@@ -460,3 +461,19 @@ export const radarAnuncios: RadarAnuncio[] = []
   }
   radarAnuncios.sort((a, b) => b.nota - a.nota)
 }
+
+// ---------------------------------------------------------------- Insights de IA (demonstração)
+export const insightsIA: InsightIA[] = [
+  {
+    id: 'demo-1', ofertaId: 'OF02', criadoEm: day(LAST),
+    resultado: {
+      resumo: 'Os campeões de Intestino Leve abrem com um depoimento em primeira pessoa sobre a dor (barriga inchada após comer) e mostram o preço baixo cedo. Vídeos explicativos com tom de médico custam o dobro por conversa.',
+      padroes_vencedores: ['Abertura em 1ª pessoa com dor específica ("minha barriga desinchou")', 'Prazo curto e concreto (4 a 7 dias)', 'Preço até R$ 19,90 citado nos primeiros segundos', 'CTA direto para o WhatsApp ("me chama que te mando")', 'Vídeo vertical curto (até 30 s) com legenda grande'],
+      o_que_evitar: ['Tom de autoridade médica / termos técnicos (SIBO, disbiose) no gancho', 'Antes e depois sem história', 'Vídeos acima de 40 s'],
+      ganchos: ['"Eu tinha vergonha de sair depois do almoço"', 'O alimento do café da manhã que estufa sua barriga', '4 dias seguindo isso e minha calça voltou a fechar', 'Se sua barriga incha até com água, assista isso', 'Parei de tomar remédio para gases depois desse cardápio', 'Ninguém te conta isso sobre a barriga estufada'],
+      angulos: [{ angulo: 'Vergonha social', porque: 'Os campeões falam do constrangimento, não só do sintoma.' }, { angulo: 'Antes de evento', porque: 'Prazo curto combina com desejo de resultado rápido.' }, { angulo: 'Mãe ocupada', porque: 'Público 35-55 responde bem a rotina simples.' }],
+      palavras_chave: ['barriga inchada', 'barriga estufada', 'gases', 'intestino preso', 'inchaço abdominal', 'cardápio desinchar', 'barriga de grávida sem estar', 'prisão de ventre', 'má digestão', 'detox intestino', 'chá para gases', 'flora intestinal'],
+      nichos_adjacentes: ['Refluxo e azia', 'Retenção de líquido', 'Intolerância à lactose'],
+    },
+  },
+]

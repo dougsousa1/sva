@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabase'
 import { Escolha, novoId } from '../components/Form'
 import { OfertaTag, PageHeader, Panel, PanelHeader, Pill, Segmented } from '../components/ui'
 import { criarOferta, NovaOferta } from './Ofertas'
+import InsightsIA from '../components/InsightsIA'
 
 const urlBiblioteca = (termo: string) =>
   'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=BR&media_type=all' +
@@ -118,6 +119,8 @@ export default function Radar() {
           )
         }
       />
+
+      <InsightsIA />
 
       <Palavras onBuscar={modo === 'live' ? buscarAgora : undefined} onMudou={async () => { await atualizar() }} buscando={busca.estado === 'rodando'} />
       {modo === 'live' && radarExecucoes.length > 0 && <Execucoes onConferir={conferirAgora} conferindo={busca.estado === 'rodando'} />}

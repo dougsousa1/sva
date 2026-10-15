@@ -32,6 +32,7 @@ export interface Criativo {
   imagemUrl?: string | null
   videoUrl?: string | null
   previewLink?: string | null
+  texto?: string | null
   criadoEm: string
 }
 
@@ -186,4 +187,22 @@ export interface RadarExecucao {
   itens: number | null
   erro: string | null
   iniciadoEm: string
+}
+
+// ---------------------------------------------------------------- Insights de IA
+export interface InsightResultado {
+  resumo: string
+  padroes_vencedores: string[]
+  o_que_evitar: string[]
+  ganchos: string[]
+  angulos: { angulo: string; porque: string }[]
+  palavras_chave: string[]
+  nichos_adjacentes: string[]
+}
+
+export interface InsightIA {
+  id: string
+  ofertaId: string | null
+  criadoEm: string
+  resultado: InsightResultado
 }

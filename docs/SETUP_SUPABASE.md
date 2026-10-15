@@ -92,3 +92,12 @@ Com isso eu configuro o sistema, publico na Vercel e te mando o link com login.
    Ele baixa as coletas prontas e, 2x por semana, busca de novo cada palavra-chave ativa.
 
 Custo: o robô cobra US$ 5,80 por 1.000 anúncios. Cada palavra busca até 20 anúncios, 2x por semana (≈170/mês) — com o crédito grátis de US$ 5, cabem 3–5 palavras. Mude a frequência com o secret `RADAR_INTERVALO_HORAS`. Acompanhe em **Apify → Billing**.
+
+## 10. Insights com IA (Gemini, plano grátis)
+1. Em **aistudio.google.com** → **Get API key** → **Create API key** (conta Google, sem cartão).
+2. Supabase → **SQL Editor**: rode [`supabase/migrations/0004_insights.sql`](../supabase/migrations/0004_insights.sql).
+3. **Edge Functions → Secrets**: `GEMINI_API_KEY` = a chave.
+4. **Deploy a new function → Via Editor**, nome `insights-ia`, código de [`supabase/functions/insights-ia/index.ts`](../supabase/functions/insights-ia/index.ts). (Esta pode ficar com Verify JWT ligado.)
+5. Atualize a `meta-sync` com a versão nova (ela passa a guardar o texto completo dos anúncios) e clique em **Sincronizar**.
+
+No plano grátis o Google pode usar os textos enviados para melhorar o modelo — só vão os textos dos anúncios e os números, nada de clientes.

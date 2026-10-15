@@ -159,6 +159,18 @@ async function sincronizar(dias: number) {
     // ex.: colunas novas ainda não criadas (migration 0002) — o resto do sync continua valendo
     aviso = e instanceof Error ? e.message : String(e)
   }
+  // Texto completo do anúncio (usado pelos insights de IA) — migration 0004
+  try {
+    const textos = new Map<string, Json>()
+    for (const a of ads) {
+      const cr = codigoCriativo(a.name) ?? `AD-${a.id}`
+      const corpo = a.creative?.body ?? a.creative?.title
+      if (corpo && !textos.has(cr)) textos.set(cr, { id: cr, texto: String(corpo).slice(0, 4000) })
+    }
+    await upsert('criativos', [...textos.values()])
+  } catch (e) {
+    aviso = [aviso, e instanceof Error ? e.message : String(e)].filter(Boolean).join(' | ')
+  }
 
   const hoje = new Date()
   const desde = new Date(hoje.getTime() - (dias - 1) * 86_400_000)
