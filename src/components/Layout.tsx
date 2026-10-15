@@ -106,7 +106,9 @@ export default function Layout() {
   const alertas = useMemo(() => gerarAlertas(imposto), [imposto])
   const criticos = alertas.filter((a) => a.nivel === 'critico').length
   const loc = useLocation()
-  useEffect(() => window.scrollTo(0, 0), [loc.pathname])
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [loc.pathname])
 
   return (
     <div className="bg-grid min-h-full">
