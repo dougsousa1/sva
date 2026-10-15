@@ -42,6 +42,8 @@ interface Ctx {
   /** muda sempre que os dados são recarregados (usado como key para remontar as telas) */
   versao: number
   recarregar: () => Promise<void>
+  /** Depois de gravar algo: recarrega do banco (ao vivo) ou só redesenha (demonstração). */
+  atualizar: () => Promise<void>
   sair: () => Promise<void>
 }
 
@@ -108,6 +110,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       modo: supabase ? 'live' : 'demo',
       versao,
       recarregar,
+      atualizar: async () => {
+        if (supabase) await recarregar()
+        else setVersao((v) => v + 1)
+      },
       sair: async () => {
         await supabase?.auth.signOut()
       },

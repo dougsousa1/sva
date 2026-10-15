@@ -1,6 +1,12 @@
 import clsx from 'clsx'
 import { Brain, CircleCheck, CircleMinus, CircleX, Plus } from 'lucide-react'
-import { aprendizados } from '../data/mock'
+import { useState } from 'react'
+import { aprendizados, criativos, ofertas } from '../data/mock'
+import type { Aprendizado } from '../data/types'
+import { Botoes, BotaoAdicionar, Campo, Escolha, Modal, novoId, Texto } from '../components/Form'
+import { useApp } from '../lib/app-context'
+import { TODAY_ISO } from '../lib/date'
+import { inserir } from '../lib/gravar'
 import { dataMes } from '../lib/format'
 import { criativoById } from '../lib/metrics'
 import { OfertaTag, PageHeader, Pill } from '../components/ui'
@@ -12,6 +18,7 @@ const v = {
 }
 
 export default function Aprendizados() {
+  const [novo, setNovo] = useState(false)
   const cont = { ganhou: 0, perdeu: 0, neutro: 0 }
   aprendizados.forEach((a) => cont[a.veredito]++)
   return (
@@ -19,7 +26,7 @@ export default function Aprendizados() {
       <PageHeader
         title="Aprendizados"
         sub="A memória da operação: hipótese → teste → resultado → decisão. É o que evita repetir erro."
-        right={<button className="flex items-center gap-1.5 rounded-xl bg-cyan px-3.5 py-2 text-sm font-medium text-bg shadow-[0_0_24px_-6px_#22d3ee] hover:brightness-110"><Plus size={16} /> Registrar teste</button>}
+        right={<BotaoAdicionar onClick={() => setNovo(true)}><Plus size={16} /> Registrar teste</BotaoAdicionar>}
       />
       <div className="mb-6 flex flex-wrap gap-2">
         {(Object.keys(v) as (keyof typeof v)[]).map((k) => {
@@ -58,6 +65,49 @@ export default function Aprendizados() {
           )
         })}
       </div>
+      {novo && <NovoAprendizado onClose={() => setNovo(false)} />}
+      {!aprendizados.length && <p className="text-sm text-ink-3">Nenhum teste registrado ainda. Clique em “Registrar teste” sempre que testar um gancho, público, preço ou oferta.</p>}
     </>
+  )
+}
+
+function NovoAprendizado({ onClose }: { onClose: () => void }) {
+  const { atualizar } = useApp()
+  const [f, setF] = useState({ oferta: ofertas[0]?.id ?? '', criativo: '', data: TODAY_ISO, hipotese: '', acao: '', resultado: '', decisao: '', veredito: 'neutro' as Aprendizado['veredito'] })
+  const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v })
+  const crs = criativos.filter((c) => c.ofertaId === f.oferta)
+  return (
+    <Modal
+      titulo="Registrar teste"
+      sub="Hipótese → o que foi feito → resultado → decisão."
+      onClose={onClose}
+      podeSalvar={!!f.oferta && !!f.hipotese.trim()}
+      onSalvar={async () => {
+        const a = {
+          id: novoId('AP'), data: f.data, ofertaId: f.oferta, criativoId: f.criativo || undefined, hipotese: f.hipotese.trim(),
+          acao: f.acao.trim(), resultado: f.resultado.trim(), decisao: f.decisao.trim(), veredito: f.veredito,
+        }
+        const err = await inserir('aprendizados', {
+          id: a.id, data: a.data, oferta_id: a.ofertaId, criativo_id: a.criativoId ?? null, hipotese: a.hipotese,
+          acao: a.acao, resultado: a.resultado, decisao: a.decisao, veredito: a.veredito,
+        }, () => {
+          aprendizados.unshift(a)
+        })
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Escolha id="apr-oferta" label="Oferta" value={f.oferta} onChange={(v) => setF({ ...f, oferta: v, criativo: '' })} opcoes={ofertas.map((o) => ({ v: o.id, l: `${o.id} · ${o.nome}` }))} />
+        <Campo id="apr-data" label="Data" tipo="date" value={f.data} onChange={set('data')} />
+      </div>
+      {crs.length > 0 && <Escolha id="apr-criativo" label="Criativo (opcional)" value={f.criativo} onChange={set('criativo')} opcoes={[{ v: '', l: '— nenhum —' }, ...crs.map((c) => ({ v: c.id, l: `${c.id} · ${c.gancho.slice(0, 40)}` }))]} />}
+      <Texto id="apr-hipotese" label="Hipótese" value={f.hipotese} onChange={set('hipotese')} placeholder="Ex.: gancho de dor converte mais que gancho de curiosidade" />
+      <Texto id="apr-acao" label="O que foi feito" value={f.acao} onChange={set('acao')} />
+      <Texto id="apr-resultado" label="Resultado" value={f.resultado} onChange={set('resultado')} />
+      <Texto id="apr-decisao" label="Decisão" value={f.decisao} onChange={set('decisao')} />
+      <Botoes label="Veredito" value={f.veredito} onChange={(v) => setF({ ...f, veredito: v })} opcoes={[{ v: 'ganhou', l: 'Funcionou' }, { v: 'perdeu', l: 'Não funcionou' }, { v: 'neutro', l: 'Inconclusivo' }]} />
+    </Modal>
   )
 }

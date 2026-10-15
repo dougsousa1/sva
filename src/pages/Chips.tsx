@@ -1,14 +1,21 @@
 import clsx from 'clsx'
-import { Battery, Cpu, HeartPulse, Skull, Smartphone, Timer } from 'lucide-react'
-import { useMemo } from 'react'
-import { aparelhos, chips, DIAS_HISTORICO, ofertas, vendas } from '../data/mock'
-import { addDays, diffDays, isoDate, TODAY } from '../lib/date'
+import { Battery, Cpu, HeartPulse, Plus, Skull, Smartphone, Timer } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { aparelhos, chips, despesas, DIAS_HISTORICO, ofertas, vendas } from '../data/mock'
+import type { Chip } from '../data/types'
+import { Botoes, BotaoAdicionar, Campo, Escolha, Modal, novoId, numero } from '../components/Form'
+import { useApp } from '../lib/app-context'
+import { alterar, inserir } from '../lib/gravar'
+import { addDays, diffDays, isoDate, TODAY, TODAY_ISO } from '../lib/date'
 import { dataCurta, money, money0, telefone } from '../lib/format'
 import { custoDiaChip, fimOperacao, ofertaById, VIDA_MEDIA_CHIP, vidaChip } from '../lib/metrics'
 import { Kpi, PageHeader, Panel, PanelHeader, Pill, Td, Th } from '../components/ui'
 
+type Acao = { tipo: 'novo' } | { tipo: 'aparelho' } | { tipo: 'ativar'; chip: Chip } | { tipo: 'caiu'; chip: Chip }
+
 export default function Chips() {
   const inicio = isoDate(addDays(TODAY, -(DIAS_HISTORICO - 1)))
+  const [acao, setAcao] = useState<Acao | null>(null)
   const receitaChip = useMemo(() => {
     const m = new Map<string, { r: number; v: number }>()
     for (const v of vendas) {
@@ -30,7 +37,16 @@ export default function Chips() {
 
   return (
     <>
-      <PageHeader title="Chips & Aparelhos" sub="O histórico que a Leona apaga quando o número cai — guardado aqui, com custo e resultado de cada chip." />
+      <PageHeader
+        title="Chips & Aparelhos"
+        sub="O histórico que a Leona apaga quando o número cai — guardado aqui, com custo e resultado de cada chip."
+        right={
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setAcao({ tipo: 'aparelho' })} className="flex items-center gap-1.5 rounded-xl border border-line px-3.5 py-2 text-sm text-ink-2 hover:text-ink"><Plus size={16} /> Celular</button>
+            <BotaoAdicionar onClick={() => setAcao({ tipo: 'novo' })}><Plus size={16} /> Novo chip</BotaoAdicionar>
+          </div>
+        }
+      />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Kpi label="Ativos agora" value={String(ativos.length)} icon={HeartPulse} tone="emerald" hint="conectados na Leona" />
@@ -38,7 +54,7 @@ export default function Chips() {
         <Kpi label="Vida média" value={`${VIDA_MEDIA_CHIP.toFixed(1)}d`} icon={Timer} tone="cyan" hint="até cair" />
         <Kpi label="Caídos" value={String(caidos.length)} icon={Skull} tone="rose" hint={`${(caidos.length / semanas).toFixed(1)} por semana`} />
         <Kpi label="Receita / chip" value={money0(recMediaCaido)} icon={Smartphone} tone="violet" hint="média antes de cair" />
-        <Kpi label="Gasto com chips" value={money0(chips.length * 15)} icon={Cpu} hint={`${chips.length} comprados · ${DIAS_HISTORICO}d`} />
+        <Kpi label="Gasto com chips" value={money0(chips.reduce((t, c) => t + c.custo, 0))} icon={Cpu} hint={`${chips.length} comprados · ${DIAS_HISTORICO}d`} />
       </div>
 
       {/* Linha do tempo */}
@@ -96,7 +112,7 @@ export default function Chips() {
           <div className="max-h-[560px] overflow-auto">
             <table className="w-full text-sm whitespace-nowrap">
               <thead className="sticky top-0 border-b border-line bg-surface">
-                <tr><Th>Conexão</Th><Th>Número</Th><Th>Oferta</Th><Th>Aparelho</Th><Th>Status</Th><Th right>Vida</Th><Th right>Custo/dia</Th><Th right>Vendas</Th><Th right>Receita</Th></tr>
+                <tr><Th>Conexão</Th><Th>Número</Th><Th>Oferta</Th><Th>Aparelho</Th><Th>Status</Th><Th right>Vida</Th><Th right>Custo/dia</Th><Th right>Vendas</Th><Th right>Receita</Th><Th right>Ação</Th></tr>
               </thead>
               <tbody className="divide-y divide-line/50">
                 {[...chips].sort((a, b) => (a.status === b.status ? ((b.ativacao ?? b.compra) > (a.ativacao ?? a.compra) ? 1 : -1) : a.status === 'ativo' ? -1 : b.status === 'ativo' ? 1 : 0)).map((c) => {
@@ -117,6 +133,10 @@ export default function Chips() {
                       <Td right className="text-ink-2">{c.ativacao ? money(custoDiaChip(c)) : '—'}</Td>
                       <Td right>{rv?.v ?? 0}</Td>
                       <Td right className={rv ? 'text-emerald' : 'text-ink-3'}>{money0(rv?.r ?? 0)}</Td>
+                      <Td right>
+                        {c.status === 'ativo' && <button onClick={() => setAcao({ tipo: 'caiu', chip: c })} className="rounded-lg border border-rose/30 px-2 py-1 text-[11px] text-rose hover:bg-rose/10">Caiu</button>}
+                        {c.status === 'reserva' && <button onClick={() => setAcao({ tipo: 'ativar', chip: c })} className="rounded-lg border border-emerald/30 px-2 py-1 text-[11px] text-emerald hover:bg-emerald/10">Ativar</button>}
+                      </Td>
                     </tr>
                   )
                 })}
@@ -125,7 +145,7 @@ export default function Chips() {
           </div>
         </Panel>
         <Panel>
-          <PanelHeader title="Aparelhos" icon={Cpu} sub="celulares de disparo (já pagos)" />
+          <PanelHeader title="Aparelhos" icon={Cpu} sub="celulares de disparo (já pagos)" right={<button onClick={() => setAcao({ tipo: 'aparelho' })} className="text-xs text-cyan hover:underline">+ adicionar</button>} />
           <div className="space-y-2.5 p-4">
             {aparelhos.map((a) => {
               const meus = chips.filter((c) => c.aparelhoId === a.id && c.ativacao)
@@ -152,6 +172,165 @@ export default function Chips() {
           </div>
         </Panel>
       </div>
+      {acao?.tipo === 'novo' && <NovoChip onClose={() => setAcao(null)} />}
+      {acao?.tipo === 'aparelho' && <NovoAparelho onClose={() => setAcao(null)} />}
+      {acao?.tipo === 'ativar' && <AtivarChip chip={acao.chip} onClose={() => setAcao(null)} />}
+      {acao?.tipo === 'caiu' && <ChipCaiu chip={acao.chip} onClose={() => setAcao(null)} />}
     </>
+  )
+}
+
+const opOfertas = () => [{ v: '', l: '— nenhuma —' }, ...ofertas.map((o) => ({ v: o.id, l: `${o.id} · ${o.nome}` }))]
+const opAparelhos = () => [{ v: '', l: '— nenhum —' }, ...aparelhos.map((a) => ({ v: a.id, l: `${a.apelido} (${a.modelo})` }))]
+
+function NovoChip({ onClose }: { onClose: () => void }) {
+  const { atualizar } = useApp()
+  const [f, setF] = useState({ nome: '', numero: '', operadora: 'Claro', custo: '15', compra: TODAY_ISO, status: 'reserva' as 'reserva' | 'ativo', ativacao: TODAY_ISO, oferta: '', aparelho: '', conexao: '' })
+  const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v })
+  return (
+    <Modal
+      titulo="Novo chip"
+      sub="O custo entra sozinho em Despesas e é rateado pelos dias de vida do chip."
+      onClose={onClose}
+      podeSalvar={!!f.nome.trim() && !!f.numero.trim()}
+      onSalvar={async () => {
+        const id = novoId('CH')
+        const ativo = f.status === 'ativo'
+        const custo = numero(f.custo)
+        const err = await inserir('chips', {
+          id, nome: f.nome.trim(), numero: f.numero.replace(/\D/g, ''), operadora: f.operadora, custo, compra: f.compra,
+          ativacao: ativo ? f.ativacao : null, status: f.status, oferta_id: f.oferta || null, aparelho_id: f.aparelho || null,
+          leona_connection_id: f.conexao ? Number(f.conexao) : null,
+        }, () => {
+          chips.push({
+            id, nome: f.nome.trim(), numero: f.numero.replace(/\D/g, ''), operadora: f.operadora, custo, compra: f.compra,
+            ativacao: ativo ? f.ativacao : null, queda: null, status: f.status, ofertaId: f.oferta || null, aparelhoId: f.aparelho,
+            leonaConnectionId: Number(f.conexao) || 0,
+          })
+        })
+        if (err) return err
+        await inserir('despesas', { data: f.compra, categoria: 'chips', descricao: `Chip ${f.operadora} — ${f.nome.trim()}`, valor: custo, tipo: 'pontual', chip_id: id }, () => {
+          despesas.unshift({ id: novoId('DP'), data: f.compra, categoria: 'chips', descricao: `Chip ${f.operadora} — ${f.nome.trim()}`, valor: custo, tipo: 'pontual', chipId: id })
+        })
+        onClose()
+        await atualizar()
+      }}
+    >
+      <Campo id="chip-nome" label="Nome (igual à conexão na Leona)" value={f.nome} onChange={set('nome')} placeholder="OF2 - SIBO/SIFO" />
+      <div className="grid grid-cols-2 gap-3">
+        <Campo id="chip-numero" label="Número" tipo="tel" value={f.numero} onChange={set('numero')} placeholder="55 61 99999-9999" mono />
+        <Escolha id="chip-operadora" label="Operadora" value={f.operadora} onChange={set('operadora')} opcoes={['Claro', 'Vivo', 'TIM', 'Oi', 'Outra'].map((v) => ({ v, l: v }))} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Campo id="chip-custo" label="Custo (R$)" tipo="number" value={f.custo} onChange={set('custo')} mono />
+        <Campo id="chip-compra" label="Data da compra" tipo="date" value={f.compra} onChange={set('compra')} />
+      </div>
+      <Botoes label="Situação" value={f.status} onChange={(v) => setF({ ...f, status: v })} opcoes={[{ v: 'reserva', l: 'Reserva (guardado)' }, { v: 'ativo', l: 'Já está rodando' }]} />
+      {f.status === 'ativo' && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo id="chip-ativacao" label="Ativado em" tipo="date" value={f.ativacao} onChange={set('ativacao')} />
+            <Campo id="chip-conexao" label="ID da conexão na Leona" tipo="number" value={f.conexao} onChange={set('conexao')} placeholder="opcional" mono />
+          </div>
+          <Escolha id="chip-oferta" label="Oferta que atende" value={f.oferta} onChange={set('oferta')} opcoes={opOfertas()} />
+        </>
+      )}
+      <Escolha id="chip-aparelho" label="Celular" value={f.aparelho} onChange={set('aparelho')} opcoes={opAparelhos()} />
+    </Modal>
+  )
+}
+
+function AtivarChip({ chip, onClose }: { chip: Chip; onClose: () => void }) {
+  const { atualizar } = useApp()
+  const [f, setF] = useState({ ativacao: TODAY_ISO, oferta: chip.ofertaId ?? '', aparelho: chip.aparelhoId ?? '', conexao: chip.leonaConnectionId ? String(chip.leonaConnectionId) : '' })
+  const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v })
+  return (
+    <Modal
+      titulo={`Ativar ${chip.nome}`}
+      sub="A partir de hoje o custo do chip é rateado para a oferta escolhida."
+      onClose={onClose}
+      rotulo="Ativar chip"
+      onSalvar={async () => {
+        const err = await alterar('chips', chip.id, {
+          status: 'ativo', ativacao: f.ativacao, oferta_id: f.oferta || null, aparelho_id: f.aparelho || null,
+          leona_connection_id: f.conexao ? Number(f.conexao) : null, queda: null, fim_uso: null,
+        }, () => {
+          Object.assign(chip, { status: 'ativo', ativacao: f.ativacao, ofertaId: f.oferta || null, aparelhoId: f.aparelho, leonaConnectionId: Number(f.conexao) || 0, queda: null, fimUso: undefined })
+        })
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+    >
+      <Campo id="at-data" label="Ativado em" tipo="date" value={f.ativacao} onChange={set('ativacao')} />
+      <Escolha id="at-oferta" label="Oferta que vai atender" value={f.oferta} onChange={set('oferta')} opcoes={opOfertas()} />
+      <Escolha id="at-aparelho" label="Celular" value={f.aparelho} onChange={set('aparelho')} opcoes={opAparelhos()} />
+      <Campo id="at-conexao" label="ID da conexão na Leona" tipo="number" value={f.conexao} onChange={set('conexao')} placeholder="liga as vendas a este chip" mono />
+    </Modal>
+  )
+}
+
+const MOTIVOS = ['Banido pelo WhatsApp', 'Restrição de envio', 'Desconectou e não voltou', 'Denúncias em massa', 'Outro']
+
+function ChipCaiu({ chip, onClose }: { chip: Chip; onClose: () => void }) {
+  const { atualizar } = useApp()
+  const [data, setData] = useState(TODAY_ISO)
+  const [motivo, setMotivo] = useState(MOTIVOS[0])
+  return (
+    <Modal
+      titulo={`${chip.nome} caiu`}
+      sub="Fecha a vida do chip: o custo passa a ser dividido pelos dias que ele realmente durou."
+      onClose={onClose}
+      rotulo="Registrar queda"
+      onSalvar={async () => {
+        const err = await alterar('chips', chip.id, { status: 'caiu', queda: data, motivo_queda: motivo }, () => {
+          Object.assign(chip, { status: 'caiu', queda: data, motivoQueda: motivo })
+        })
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+    >
+      <Campo id="caiu-data" label="Caiu em" tipo="date" value={data} onChange={setData} />
+      <Escolha id="caiu-motivo" label="Motivo" value={motivo} onChange={setMotivo} opcoes={MOTIVOS.map((v) => ({ v, l: v }))} />
+    </Modal>
+  )
+}
+
+function NovoAparelho({ onClose }: { onClose: () => void }) {
+  const { atualizar } = useApp()
+  const [modelo, setModelo] = useState('')
+  const [apelido, setApelido] = useState('')
+  const [valor, setValor] = useState('')
+  const [data, setData] = useState(TODAY_ISO)
+  return (
+    <Modal
+      titulo="Novo celular"
+      sub="Se informar o valor, ele entra em Despesas como compra pontual no dia."
+      onClose={onClose}
+      podeSalvar={!!modelo.trim() && !!apelido.trim()}
+      onSalvar={async () => {
+        const id = novoId('AP')
+        const err = await inserir('aparelhos', { id, modelo: modelo.trim(), apelido: apelido.trim(), status: 'ok' }, () => {
+          aparelhos.push({ id, modelo: modelo.trim(), apelido: apelido.trim(), status: 'ok' })
+        })
+        if (err) return err
+        const v = numero(valor)
+        if (v > 0) {
+          await inserir('despesas', { data, categoria: 'aparelhos', descricao: `${modelo.trim()} (${apelido.trim()})`, valor: v, tipo: 'pontual' }, () => {
+            despesas.unshift({ id: novoId('DP'), data, categoria: 'aparelhos', descricao: `${modelo.trim()} (${apelido.trim()})`, valor: v, tipo: 'pontual' })
+          })
+        }
+        onClose()
+        await atualizar()
+      }}
+    >
+      <Campo id="ap-modelo" label="Modelo" value={modelo} onChange={setModelo} placeholder="Samsung Galaxy A15" />
+      <Campo id="ap-apelido" label="Apelido (como vocês chamam)" value={apelido} onChange={setApelido} placeholder="Samsung Preto" />
+      <div className="grid grid-cols-2 gap-3">
+        <Campo id="ap-valor" label="Valor pago (R$)" tipo="number" value={valor} onChange={setValor} placeholder="opcional" mono />
+        <Campo id="ap-data" label="Data da compra" tipo="date" value={data} onChange={setData} />
+      </div>
+    </Modal>
   )
 }

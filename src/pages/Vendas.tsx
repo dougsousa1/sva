@@ -1,6 +1,9 @@
-import { BadgeDollarSign, MapPin, Radio, Search } from 'lucide-react'
+import { BadgeDollarSign, MapPin, Plus, Radio, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { vendas } from '../data/mock'
+import { chips, ofertas, vendas } from '../data/mock'
+import { BotaoAdicionar, Campo, Escolha, Modal, numero } from '../components/Form'
+import { TODAY_ISO } from '../lib/date'
+import { inserir } from '../lib/gravar'
 import { useApp } from '../lib/app-context'
 import { dataCurta, hora, money, money0, num } from '../lib/format'
 import { chipById, criativoById, adIndex, inPeriodo } from '../lib/metrics'
@@ -8,6 +11,7 @@ import { Kpi, OfertaTag, PageHeader, Panel, PanelHeader, Pill, Td, Th } from '..
 
 export default function Vendas() {
   const { periodo, modo } = useApp()
+  const [nova, setNova] = useState(false)
   const [q, setQ] = useState('')
   const lista = useMemo(() => vendas.filter((v) => inPeriodo(v.data, periodo)), [periodo])
   const filtrada = useMemo(() => {
@@ -29,8 +33,11 @@ export default function Vendas() {
         title="Vendas"
         sub="Chegam pelo webhook da Leona com o source_id do anúncio — atribuição automática."
         right={
-          <div className="flex items-center gap-2 rounded-xl border border-emerald/25 bg-emerald/5 px-3 py-2 text-xs text-emerald">
-            <Radio size={14} /> <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald text-emerald" /> {modo === 'demo' ? 'webhook Leona (demo)' : 'webhook Leona'}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-xl border border-emerald/25 bg-emerald/5 px-3 py-2 text-xs text-emerald">
+              <Radio size={14} /> <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald text-emerald" /> {modo === 'demo' ? 'webhook Leona (demo)' : 'webhook Leona'}
+            </div>
+            <BotaoAdicionar onClick={() => setNova(true)}><Plus size={16} /> Venda manual</BotaoAdicionar>
           </div>
         }
       />
@@ -94,6 +101,59 @@ export default function Vendas() {
           </div>
         </Panel>
       </div>
+      {nova && <NovaVenda onClose={() => setNova(false)} />}
     </>
+  )
+}
+
+/** Venda que não veio pela Leona (Pix direto, recompra etc.). */
+function NovaVenda({ onClose }: { onClose: () => void }) {
+  const { atualizar } = useApp()
+  const agora = new Date()
+  const [f, setF] = useState({
+    data: TODAY_ISO, hora: `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`,
+    valor: '', oferta: ofertas[0]?.id ?? '', chip: '', cliente: '', ddd: '', anuncio: '',
+  })
+  const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v })
+  const valor = numero(f.valor)
+  return (
+    <Modal
+      titulo="Venda manual"
+      sub="Para vendas que não chegaram pelo webhook da Leona."
+      onClose={onClose}
+      podeSalvar={valor > 0 && !!f.oferta}
+      onSalvar={async () => {
+        const id = `M-${Date.now()}`
+        const quando = new Date(`${f.data}T${f.hora || '12:00'}:00`)
+        const of = ofertas.find((o) => o.id === f.oferta)
+        const chip = chips.find((c) => c.id === f.chip)
+        const err = await inserir('vendas', {
+          id, data: quando.toISOString(), valor, leona_product_id: of?.leonaProductId ?? null, produto_nome: f.oferta,
+          anuncio_id: f.anuncio.trim() || null, leona_connection_id: chip?.leonaConnectionId || null, instancia: chip?.nome ?? null,
+          ddd: f.ddd.trim() || null, cliente: f.cliente.trim() || null, origem: 'manual',
+        }, () => {
+          vendas.unshift({
+            id, data: `${f.data}T${f.hora || '12:00'}:00`, valor, ofertaId: f.oferta, anuncioId: f.anuncio.trim() || null,
+            chipId: f.chip, ddd: f.ddd.trim(), cliente: f.cliente.trim(), origem: 'manual',
+          })
+        })
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+    >
+      <div className="grid grid-cols-3 gap-3">
+        <Campo id="vd-valor" label="Valor (R$)" tipo="number" value={f.valor} onChange={set('valor')} placeholder="19,90" mono />
+        <Campo id="vd-data" label="Data" tipo="date" value={f.data} onChange={set('data')} />
+        <Campo id="vd-hora" label="Hora" value={f.hora} onChange={set('hora')} placeholder="14:30" mono />
+      </div>
+      <Escolha id="vd-oferta" label="Oferta" value={f.oferta} onChange={set('oferta')} opcoes={ofertas.map((o) => ({ v: o.id, l: `${o.id} · ${o.nome}` }))} />
+      <Escolha id="vd-chip" label="Chip que vendeu" value={f.chip} onChange={set('chip')} opcoes={[{ v: '', l: '— não sei —' }, ...chips.filter((c) => c.ativacao).map((c) => ({ v: c.id, l: c.nome }))]} />
+      <div className="grid grid-cols-[1fr_90px] gap-3">
+        <Campo id="vd-cliente" label="Cliente" value={f.cliente} onChange={set('cliente')} placeholder="opcional" />
+        <Campo id="vd-ddd" label="DDD" value={f.ddd} onChange={set('ddd')} placeholder="11" mono />
+      </div>
+      <Campo id="vd-anuncio" label="ID do anúncio (source_id)" value={f.anuncio} onChange={set('anuncio')} placeholder="opcional — liga a venda ao criativo" mono />
+    </Modal>
   )
 }

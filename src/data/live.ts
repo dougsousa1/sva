@@ -88,7 +88,7 @@ export async function carregarAoVivo(sb: SupabaseClient): Promise<{ imposto: num
   const chipPorConexao = new Map(chipsNovos.filter((c) => c.leonaConnectionId).map((c) => [String(c.leonaConnectionId), c.id]))
   trocar(vendas, vd.map((v) => ({
     id: v.id, data: dataLocal(v.data), valor: num(v.valor),
-    ofertaId: ofertaPorProduto.get(String(v.leona_product_id)) ?? '', anuncioId: v.anuncio_id,
+    ofertaId: ofertaPorProduto.get(String(v.leona_product_id)) ?? (ofertaIds.has(v.produto_nome) ? v.produto_nome : ''), anuncioId: v.anuncio_id,
     chipId: chipPorConexao.get(String(v.leona_connection_id)) ?? '', instancia: v.instancia,
     ddd: v.ddd ?? '', cliente: v.cliente ?? '', origem: v.origem ?? '',
   })))
