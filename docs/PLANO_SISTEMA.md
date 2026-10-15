@@ -176,7 +176,7 @@ aprendizados        (id, oferta_id?, criativo_id?, hipotese, acao, resultado, de
 
 ## 9. Stack proposta e fases
 
-**Stack sugerida:** Supabase (banco Postgres + login + cron) · Next.js hospedado na Vercel · rotinas de sincronização agendadas (Meta + Leona) · endpoint de webhook para a Leona · bot do Telegram. Usuário único (só o dono), com login simples — sem perfis/permissões.
+**Stack:** Front-end React + Vite + Tailwind (já construído, modo demonstração) · Supabase (banco Postgres + login + cron + Edge Functions) · hospedagem na Vercel · rotinas de sincronização agendadas (Meta + Leona) · endpoint de webhook para a Leona · bot do Telegram. Usuário único (só o dono), com login simples — sem perfis/permissões.
 
 | Fase | Entrega | Resultado |
 |---|---|---|
