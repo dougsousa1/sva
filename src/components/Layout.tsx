@@ -66,20 +66,22 @@ function BotaoSync() {
   const [msg, setMsg] = useState('')
   return (
     <button
-      title={msg || 'Puxar agora os dados do Meta (últimos 30 dias)'}
+      title={msg || 'Puxar agora Meta e Leona (últimos 30 dias)'}
       disabled={estado === 'rodando'}
       onClick={async () => {
         if (!supabase) return
         setEstado('rodando')
-        const { data, error } = await supabase.functions.invoke('meta-sync', { body: { dias: 30 } })
-        if (error || !data?.ok) {
-          setEstado('erro')
-          setMsg(error?.message ?? data?.erro ?? 'falhou')
-          return
-        }
-        setMsg(`${data.anuncios} anúncios · ${data.insights} linhas de insights`)
+        const [meta, leona] = await Promise.all([
+          supabase.functions.invoke('meta-sync', { body: { dias: 30 } }),
+          supabase.functions.invoke('leona-sync', { body: { dias: 30 } }),
+        ])
+        const erros = [
+          meta.error || !meta.data?.ok ? `Meta: ${meta.data?.erro ?? meta.error?.message ?? 'falhou'}` : '',
+          leona.error || !leona.data?.ok ? `Leona: ${leona.data?.erro ?? leona.error?.message ?? 'falhou'}` : '',
+        ].filter(Boolean)
+        setMsg(erros.length ? erros.join(' · ') : `${meta.data.anuncios} anúncios · ${leona.data.vendas} vendas`)
         await recarregar()
-        setEstado('parado')
+        setEstado(erros.length ? 'erro' : 'parado')
       }}
       className={clsx(
         'flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] transition',
@@ -87,7 +89,7 @@ function BotaoSync() {
       )}
     >
       {estado === 'rodando' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-      {estado === 'rodando' ? 'Sincronizando…' : estado === 'erro' ? 'Erro no sync' : 'Sincronizar Meta'}
+      {estado === 'rodando' ? 'Sincronizando…' : estado === 'erro' ? 'Erro no sync (passe o mouse)' : 'Sincronizar'}
     </button>
   )
 }

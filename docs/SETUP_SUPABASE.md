@@ -57,12 +57,18 @@ Depois, em cada função → **Details/Settings** → desligue **Enforce JWT ver
 
 (Se o Cron pedir para ativar as extensões `pg_cron`/`pg_net`, pode ativar.)
 
-## 7. Webhook da Leona
-No painel da Leona, na área de webhooks/integrações, cadastre para o evento de **venda aprovada**:
-```
-https://<ID-DO-PROJETO>.supabase.co/functions/v1/leona-webhook?token=<LEONA_WEBHOOK_SECRET>
-```
-O `<ID-DO-PROJETO>` aparece no endereço do painel do Supabase (`supabase.com/dashboard/project/<ID>`).
+## 7. Vendas da Leona (busca automática)
+A tela "Webhooks de entrada" da Leona serve para **receber** dados, não para enviar — por isso o sistema **busca** as vendas na Leona pelo MCP, a cada 15 minutos.
+
+1. Na Leona: **Configurações → MCP / Credenciais → Nova credencial → Token estático**, nome `SVA Supabase` → Criar. Copie o **token** e a **URL do MCP**.
+2. No Supabase, **Edge Functions → Secrets**:
+   - `LEONA_MCP_TOKEN` = o token
+   - `LEONA_MCP_URL` = a URL do MCP da Leona
+3. **Edge Functions → Deploy a new function → Via Editor**, nome `leona-sync`, código de [`supabase/functions/leona-sync/index.ts`](../supabase/functions/leona-sync/index.ts). Depois desligue **Verify JWT** dela.
+4. **Integrations → Cron → Create job**: nome `leona-sync`, agendamento `*/15 * * * *`, Edge Function `leona-sync` (POST), header `x-sync-secret` = seu `SYNC_SECRET`, body `{"dias": 365}`.
+   Depois da primeira rodada (que traz o histórico), troque o body para `{"dias": 2}`.
+
+(A função `leona-webhook` continua publicada, mas não é usada nesse caminho.)
 
 ## 8. Me mandar (pode mandar no chat — são públicos)
 **Project Settings → API Keys** (ou **Data API**):
