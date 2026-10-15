@@ -58,6 +58,8 @@ const codigoOferta = (nome: string) => nome.match(/\[(OF\d{2,})\]/i)?.[1].toUppe
 const codigoCriativo = (nome: string) => nome.match(/\b(CR\d{2,})\b/i)?.[1].toUpperCase() ?? null
 const statusMeta = (s: string) => (s === 'ACTIVE' ? 'ativo' : s === 'DISAPPROVED' || s === 'WITH_ISSUES' ? 'reprovado' : 'pausado')
 const isoDia = (d: Date) => d.toISOString().slice(0, 10)
+const CAMPOS_AD = 'id,name,adset_id,campaign_id,effective_status,created_time,preview_shareable_link'
+const CAMPOS_CRIATIVO = 'id,title,body,thumbnail_url,image_url,object_type,video_id'
 
 async function upsert(tabela: string, linhas: Json[], onConflict?: string) {
   for (let i = 0; i < linhas.length; i += 500) {
@@ -79,7 +81,9 @@ async function sincronizar(dias: number) {
   const [camps, sets, ads] = await Promise.all([
     todas(`${conta}/campaigns`, { fields: 'id,name,effective_status,created_time' }),
     todas(`${conta}/adsets`, { fields: 'id,name,campaign_id,effective_status,daily_budget' }),
-    todas(`${conta}/ads`, { fields: 'id,name,adset_id,campaign_id,effective_status,created_time,creative{id,title,body,thumbnail_url,image_url,object_type,video_id}' }),
+    // miniatura grande; se o Meta não aceitar o parâmetro, cai para o formato simples
+    todas(`${conta}/ads`, { fields: `${CAMPOS_AD},creative.thumbnail_width(720).thumbnail_height(720){${CAMPOS_CRIATIVO}}` })
+      .catch(() => todas(`${conta}/ads`, { fields: `${CAMPOS_AD},creative{${CAMPOS_CRIATIVO}}` })),
   ])
 
   const { data: ofertas } = await supabase.from('ofertas').select('id')
@@ -110,7 +114,7 @@ async function sincronizar(dias: number) {
         oferta_id: of && ofertaExiste.has(of) ? of : null,
         tipo: c.video_id || c.object_type === 'VIDEO' ? 'video' : 'imagem',
         gancho: c.title || c.body?.slice(0, 120) || a.name,
-        thumbnail_url: c.thumbnail_url ?? c.image_url ?? null,
+        thumbnail_url: c.image_url ?? c.thumbnail_url ?? null,
         meta_creative_id: c.id ?? null,
         criado_em: (a.created_time ?? agora).slice(0, 10),
       })
@@ -122,6 +126,39 @@ async function sincronizar(dias: number) {
   })
   await upsert('criativos', novosCriativos)
   await upsert('meta_anuncios', anuncios)
+
+  // Mídia em alta: imagem grande, vídeo (mp4) e link de prévia — atualizada a cada sync,
+  // porque os links de vídeo do Meta expiram depois de algumas horas.
+  const videoIds = [...new Set(ads.map((a) => a.creative?.video_id).filter(Boolean))] as string[]
+  const videos = new Map<string, Json>()
+  for (let i = 0; i < videoIds.length; i += 10) {
+    const lote = await Promise.all(videoIds.slice(i, i + 10).map((id) =>
+      graph(id, { fields: 'source,picture,thumbnails{uri,is_preferred,height}' }).catch(() => null)))
+    lote.forEach((v, j) => v && videos.set(videoIds[i + j], v))
+  }
+  const midia = new Map<string, Json>()
+  for (const a of ads) {
+    const cr = codigoCriativo(a.name) ?? `AD-${a.id}`
+    if (midia.has(cr)) continue
+    const c = a.creative ?? {}
+    const v = c.video_id ? videos.get(c.video_id) : null
+    const thumbs: Json[] = v?.thumbnails?.data ?? []
+    const capa = (thumbs.find((t) => t.is_preferred) ?? thumbs.sort((x, y) => (y.height ?? 0) - (x.height ?? 0))[0])?.uri
+    midia.set(cr, {
+      id: cr,
+      thumbnail_url: capa ?? c.image_url ?? c.thumbnail_url ?? null,
+      imagem_url: c.image_url ?? capa ?? v?.picture ?? c.thumbnail_url ?? null,
+      video_url: v?.source ?? null,
+      preview_link: a.preview_shareable_link ?? null,
+    })
+  }
+  let aviso: string | null = null
+  try {
+    await upsert('criativos', [...midia.values()])
+  } catch (e) {
+    // ex.: colunas novas ainda não criadas (migration 0002) — o resto do sync continua valendo
+    aviso = e instanceof Error ? e.message : String(e)
+  }
 
   const hoje = new Date()
   const desde = new Date(hoje.getTime() - (dias - 1) * 86_400_000)
@@ -141,7 +178,7 @@ async function sincronizar(dias: number) {
     conversas: Number((i.actions ?? []).find((x: Json) => x.action_type === CONVERSA)?.value ?? 0),
   })), 'anuncio_id,data')
 
-  return { campanhas: camps.length, conjuntos: sets.length, anuncios: ads.length, insights: insights.length, criativos_novos: novosCriativos.length }
+  return { campanhas: camps.length, conjuntos: sets.length, anuncios: ads.length, insights: insights.length, criativos_novos: novosCriativos.length, videos: videos.size, aviso }
 }
 
 Deno.serve(async (req) => {

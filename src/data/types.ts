@@ -29,6 +29,9 @@ export interface Criativo {
   ferramenta: string
   duracao?: number
   thumbnailUrl?: string | null
+  imagemUrl?: string | null
+  videoUrl?: string | null
+  previewLink?: string | null
   criadoEm: string
 }
 

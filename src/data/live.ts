@@ -51,7 +51,8 @@ export async function carregarAoVivo(sb: SupabaseClient): Promise<{ imposto: num
   })))
   trocar(criativos, cr.map((c) => ({
     id: c.id, ofertaId: c.oferta_id, tipo: c.tipo, gancho: c.gancho, versao: c.versao, ferramenta: c.ferramenta ?? '',
-    duracao: c.duracao ?? undefined, thumbnailUrl: c.thumbnail_url, criadoEm: c.criado_em,
+    duracao: c.duracao ?? undefined, thumbnailUrl: c.thumbnail_url, imagemUrl: c.imagem_url ?? null,
+    videoUrl: c.video_url ?? null, previewLink: c.preview_link ?? null, criadoEm: c.criado_em,
   })))
   trocar(contas, ct.map((c) => ({ id: c.id, nome: c.nome, status: c.status, limiteDiario: num(c.limite_diario) })))
 

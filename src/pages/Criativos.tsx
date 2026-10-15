@@ -1,6 +1,7 @@
 import clsx from 'clsx'
-import { ChevronDown, Flame, TrendingDown } from 'lucide-react'
+import { ChevronDown, ExternalLink, Flame, TrendingDown, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { criativos, ofertas } from '../data/mock'
 import { useApp } from '../lib/app-context'
 import { money, money0, num, pct, x2 } from '../lib/format'
@@ -168,9 +169,11 @@ function Resumo({ l, v, c = 'text-ink' }: { l: string; v: string; c?: string }) 
 }
 
 function Card({ x, i }: { x: Linha; i: number }) {
+  const [aberto, setAberto] = useState(false)
   return (
     <div className="panel fade-up overflow-hidden" style={{ animationDelay: `${i * 25}ms` }}>
-      <div className="relative">
+      {aberto && <Visualizador x={x} onClose={() => setAberto(false)} />}
+      <button type="button" onClick={() => setAberto(true)} className="relative block w-full cursor-zoom-in text-left" aria-label={`Ver criativo ${x.c.id}`}>
         <Thumb c={x.c} className="aspect-[16/10] rounded-none" />
         <div className="absolute top-2.5 right-2.5 flex gap-1.5">
           {i < 3 && x.vendas > 0 && <Pill tone="emerald"><Flame size={11} /> top {i + 1}</Pill>}
@@ -178,7 +181,7 @@ function Card({ x, i }: { x: Linha; i: number }) {
           {x.reprovado && <Pill tone="rose">reprovado</Pill>}
           {!x.ativo && !x.reprovado && <Pill>pausado</Pill>}
         </div>
-      </div>
+      </button>
       <div className="p-4">
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="num truncate text-ink-3">{x.c.id} · v{x.c.versao}{x.c.ferramenta ? ` · ${x.c.ferramenta}` : ''}</span>
@@ -205,5 +208,47 @@ function Stat({ l, v, c = 'text-ink' }: { l: string; v: string; c?: string }) {
       <div className="text-[10px] text-ink-3">{l}</div>
       <div className={clsx('num text-[13px] font-medium', c)}>{v}</div>
     </div>
+  )
+}
+
+/** Abre o criativo grande: vídeo com player, ou a imagem em alta, + link da prévia no Facebook. */
+function Visualizador({ x, onClose }: { x: Linha; onClose: () => void }) {
+  const c = x.c
+  const [falhou, setFalhou] = useState(false)
+  const imagem = c.imagemUrl ?? c.thumbnailUrl
+  return createPortal(
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="panel panel-glow w-full max-w-3xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-3.5">
+          <div className="min-w-0">
+            <div className="truncate font-display text-[15px] font-semibold">{c.gancho}</div>
+            <div className="num mt-0.5 truncate text-[11px] text-ink-3">{c.id}{c.ferramenta ? ` · ${c.ferramenta}` : ''}</div>
+          </div>
+          <button onClick={onClose} className="rounded-lg border border-line p-1.5 text-ink-2 hover:text-ink" aria-label="Fechar"><X size={16} /></button>
+        </div>
+        <div className="grid place-items-center bg-black">
+          {c.videoUrl && !falhou ? (
+            <video src={c.videoUrl} poster={imagem ?? undefined} controls autoPlay playsInline onError={() => setFalhou(true)} className="max-h-[70vh] w-full bg-black object-contain" />
+          ) : imagem ? (
+            <img src={imagem} alt={c.gancho} className="max-h-[70vh] w-full object-contain" />
+          ) : (
+            <div className="p-10 text-sm text-ink-3">Sem mídia ainda — clique em Sincronizar para buscar no Meta.</div>
+          )}
+        </div>
+        {falhou && <p className="px-5 pt-3 text-xs text-amber">O link do vídeo expirou. Clique em Sincronizar no topo para renovar, ou abra a prévia no Facebook.</p>}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4 text-xs">
+          <span className="text-ink-3">Margem <b className={clsx('num font-medium', x.margem >= 0 ? 'text-emerald' : 'text-rose')}>{money0(x.margem)}</b></span>
+          <span className="text-ink-3">ROAS <b className="num font-medium text-ink">{x2(x.roas)}</b></span>
+          <span className="text-ink-3">Vendas <b className="num font-medium text-ink">{num(x.vendas)}</b></span>
+          <span className="text-ink-3">CTR <b className="num font-medium text-ink">{pct(x.ctr)}</b></span>
+          {c.previewLink && (
+            <a href={c.previewLink} target="_blank" rel="noreferrer" className="ml-auto flex items-center gap-1.5 rounded-lg border border-cyan/40 px-3 py-1.5 text-cyan hover:bg-cyan/10">
+              <ExternalLink size={13} /> Ver anúncio no Facebook
+            </a>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }

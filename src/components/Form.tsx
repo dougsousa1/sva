@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 export const inputCls =
   'mt-1.5 w-full rounded-xl border border-line bg-bg/70 px-3 py-2.5 text-sm text-ink outline-none [color-scheme:dark] focus:border-cyan/60 focus:shadow-[0_0_0_3px_rgba(34,211,238,.12)]'
@@ -17,7 +18,7 @@ export function Modal({ titulo, sub, onClose, onSalvar, podeSalvar = true, rotul
 }) {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
       <form
         className="panel panel-glow w-full max-w-lg p-6"
@@ -45,7 +46,8 @@ export function Modal({ titulo, sub, onClose, onSalvar, podeSalvar = true, rotul
           {salvando ? 'Salvando…' : rotulo}
         </button>
       </form>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
