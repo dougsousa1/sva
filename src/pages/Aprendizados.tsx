@@ -6,7 +6,7 @@ import type { Aprendizado } from '../data/types'
 import { Botoes, BotaoAdicionar, Campo, Escolha, Modal, novoId, Texto } from '../components/Form'
 import { useApp } from '../lib/app-context'
 import { TODAY_ISO } from '../lib/date'
-import { inserir } from '../lib/gravar'
+import { alterar, excluir, inserir, tirar } from '../lib/gravar'
 import { dataMes } from '../lib/format'
 import { criativoById } from '../lib/metrics'
 import { OfertaTag, PageHeader, Pill } from '../components/ui'
@@ -19,6 +19,7 @@ const v = {
 
 export default function Aprendizados() {
   const [novo, setNovo] = useState(false)
+  const [editando, setEditando] = useState<Aprendizado | null>(null)
   const cont = { ganhou: 0, perdeu: 0, neutro: 0 }
   aprendizados.forEach((a) => cont[a.veredito]++)
   return (
@@ -44,7 +45,7 @@ export default function Aprendizados() {
               <div className={clsx('absolute top-4 -left-[37px] grid h-5 w-5 place-items-center rounded-full ring-4 ring-bg', v[a.veredito].bg)}>
                 <I size={12} className="text-bg" />
               </div>
-              <div className="panel p-5">
+              <div className="panel cursor-pointer p-5 transition hover:border-line-2" onClick={() => setEditando(a)} title="Clique para editar">
                 <div className="flex flex-wrap items-center gap-2.5 text-xs">
                   <span className="num text-ink-3">{dataMes(a.data)}</span>
                   <OfertaTag id={a.ofertaId} />
@@ -66,33 +67,43 @@ export default function Aprendizados() {
         })}
       </div>
       {novo && <NovoAprendizado onClose={() => setNovo(false)} />}
+      {editando && <NovoAprendizado a={editando} onClose={() => setEditando(null)} />}
       {!aprendizados.length && <p className="text-sm text-ink-3">Nenhum teste registrado ainda. Clique em “Registrar teste” sempre que testar um gancho, público, preço ou oferta.</p>}
     </>
   )
 }
 
-function NovoAprendizado({ onClose }: { onClose: () => void }) {
+function NovoAprendizado({ onClose, a: ed }: { onClose: () => void; a?: Aprendizado }) {
   const { atualizar } = useApp()
-  const [f, setF] = useState({ oferta: ofertas[0]?.id ?? '', criativo: '', data: TODAY_ISO, hipotese: '', acao: '', resultado: '', decisao: '', veredito: 'neutro' as Aprendizado['veredito'] })
+  const [f, setF] = useState(ed
+    ? { oferta: ed.ofertaId, criativo: ed.criativoId ?? '', data: ed.data, hipotese: ed.hipotese, acao: ed.acao, resultado: ed.resultado, decisao: ed.decisao, veredito: ed.veredito }
+    : { oferta: ofertas[0]?.id ?? '', criativo: '', data: TODAY_ISO, hipotese: '', acao: '', resultado: '', decisao: '', veredito: 'neutro' as Aprendizado['veredito'] })
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v })
   const crs = criativos.filter((c) => c.ofertaId === f.oferta)
   return (
     <Modal
-      titulo="Registrar teste"
+      titulo={ed ? 'Editar teste' : 'Registrar teste'}
       sub="Hipótese → o que foi feito → resultado → decisão."
       onClose={onClose}
       podeSalvar={!!f.oferta && !!f.hipotese.trim()}
+      onExcluir={ed ? async () => {
+        const err = await excluir('aprendizados', ed.id, () => tirar(aprendizados, ed))
+        if (err) return err
+        onClose()
+        await atualizar()
+      } : undefined}
       onSalvar={async () => {
         const a = {
-          id: novoId('AP'), data: f.data, ofertaId: f.oferta, criativoId: f.criativo || undefined, hipotese: f.hipotese.trim(),
+          id: ed?.id ?? novoId('AP'), data: f.data, ofertaId: f.oferta, criativoId: f.criativo || undefined, hipotese: f.hipotese.trim(),
           acao: f.acao.trim(), resultado: f.resultado.trim(), decisao: f.decisao.trim(), veredito: f.veredito,
         }
-        const err = await inserir('aprendizados', {
-          id: a.id, data: a.data, oferta_id: a.ofertaId, criativo_id: a.criativoId ?? null, hipotese: a.hipotese,
+        const db = {
+          data: a.data, oferta_id: a.ofertaId, criativo_id: a.criativoId ?? null, hipotese: a.hipotese,
           acao: a.acao, resultado: a.resultado, decisao: a.decisao, veredito: a.veredito,
-        }, () => {
-          aprendizados.unshift(a)
-        })
+        }
+        const err = ed
+          ? await alterar('aprendizados', ed.id, db, () => Object.assign(ed, a))
+          : await inserir('aprendizados', { id: a.id, ...db }, () => { aprendizados.unshift(a) })
         if (err) return err
         onClose()
         await atualizar()

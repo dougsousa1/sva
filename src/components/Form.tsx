@@ -7,17 +7,20 @@ export const inputCls =
   'mt-1.5 w-full rounded-xl border border-line bg-bg/70 px-3 py-2.5 text-sm text-ink outline-none [color-scheme:dark] focus:border-cyan/60 focus:shadow-[0_0_0_3px_rgba(34,211,238,.12)]'
 
 /** Janela de formulário. `onSalvar` devolve uma mensagem de erro (ou nada, se deu certo). */
-export function Modal({ titulo, sub, onClose, onSalvar, podeSalvar = true, rotulo = 'Salvar', children }: {
+export function Modal({ titulo, sub, onClose, onSalvar, onExcluir, podeSalvar = true, rotulo = 'Salvar', children }: {
   titulo: ReactNode
   sub?: string
   onClose: () => void
   onSalvar: () => Promise<string | void>
+  /** Se passado, mostra "Excluir" (pede confirmação com um 2º clique). */
+  onExcluir?: () => Promise<string | void>
   podeSalvar?: boolean
   rotulo?: string
   children: ReactNode
 }) {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [confirmar, setConfirmar] = useState(false)
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
       <form
@@ -42,9 +45,31 @@ export function Modal({ titulo, sub, onClose, onSalvar, podeSalvar = true, rotul
         </div>
         <div className="space-y-3.5">{children}</div>
         {erro && <p className="mt-3 text-xs text-rose">{erro}</p>}
-        <button disabled={!podeSalvar || salvando} className="mt-6 w-full rounded-xl bg-cyan py-2.5 text-sm font-semibold text-bg disabled:opacity-40">
-          {salvando ? 'Salvando…' : rotulo}
-        </button>
+        <div className="mt-6 flex gap-2">
+          {onExcluir && (
+            <button
+              type="button"
+              disabled={salvando}
+              onClick={async () => {
+                if (!confirmar) return setConfirmar(true)
+                setSalvando(true)
+                const r = await onExcluir()
+                setSalvando(false)
+                if (r) setErro(r)
+              }}
+              onBlur={() => setConfirmar(false)}
+              className={clsx(
+                'rounded-xl border px-4 py-2.5 text-sm font-medium transition disabled:opacity-40',
+                confirmar ? 'border-rose bg-rose text-white' : 'border-rose/40 text-rose hover:bg-rose/10',
+              )}
+            >
+              {confirmar ? 'Confirmar exclusão' : 'Excluir'}
+            </button>
+          )}
+          <button disabled={!podeSalvar || salvando} className="flex-1 rounded-xl bg-cyan py-2.5 text-sm font-semibold text-bg disabled:opacity-40">
+            {salvando ? 'Salvando…' : rotulo}
+          </button>
+        </div>
       </form>
     </div>,
     document.body,

@@ -3,7 +3,8 @@ import { useMemo, useState } from 'react'
 import { chips, ofertas, vendas } from '../data/mock'
 import { BotaoAdicionar, Campo, Escolha, Modal, numero } from '../components/Form'
 import { TODAY_ISO } from '../lib/date'
-import { inserir } from '../lib/gravar'
+import { alterar, excluir, inserir, tirar } from '../lib/gravar'
+import type { Venda } from '../data/types'
 import { useApp } from '../lib/app-context'
 import { dataCurta, hora, money, money0, num } from '../lib/format'
 import { chipById, criativoById, adIndex, inPeriodo } from '../lib/metrics'
@@ -12,6 +13,7 @@ import { Kpi, OfertaTag, PageHeader, Panel, PanelHeader, Pill, Td, Th } from '..
 export default function Vendas() {
   const { periodo, modo } = useApp()
   const [nova, setNova] = useState(false)
+  const [editando, setEditando] = useState<Venda | null>(null)
   const [q, setQ] = useState('')
   const lista = useMemo(() => vendas.filter((v) => inPeriodo(v.data, periodo)), [periodo])
   const filtrada = useMemo(() => {
@@ -70,7 +72,12 @@ export default function Vendas() {
                   const ad = v.anuncioId ? adIndex.get(v.anuncioId) : null
                   const cr = ad ? criativoById.get(ad.anuncio.criativoId) : null
                   return (
-                    <tr key={v.id} className="hover:bg-white/[.02]">
+                    <tr
+                      key={v.id}
+                      onClick={v.origem === 'manual' ? () => setEditando(v) : undefined}
+                      title={v.origem === 'manual' ? 'Venda manual — clique para editar' : undefined}
+                      className={v.origem === 'manual' ? 'cursor-pointer bg-cyan/[.03] hover:bg-white/[.04]' : 'hover:bg-white/[.02]'}
+                    >
                       <Td className="num text-xs text-ink-2">{dataCurta(v.data)} <span className="text-ink-3">{hora(v.data)}</span></Td>
                       <Td className="max-w-[200px] truncate text-ink">{v.cliente}</Td>
                       <Td><OfertaTag id={v.ofertaId} nome={false} /></Td>
@@ -102,36 +109,47 @@ export default function Vendas() {
         </Panel>
       </div>
       {nova && <NovaVenda onClose={() => setNova(false)} />}
+      {editando && <NovaVenda v={editando} onClose={() => setEditando(null)} />}
     </>
   )
 }
 
 /** Venda que não veio pela Leona (Pix direto, recompra etc.). */
-function NovaVenda({ onClose }: { onClose: () => void }) {
+function NovaVenda({ onClose, v: ed }: { onClose: () => void; v?: Venda }) {
   const { atualizar } = useApp()
   const agora = new Date()
-  const [f, setF] = useState({
-    data: TODAY_ISO, hora: `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`,
-    valor: '', oferta: ofertas[0]?.id ?? '', chip: '', cliente: '', ddd: '', anuncio: '',
-  })
+  const [f, setF] = useState(ed
+    ? { data: ed.data.slice(0, 10), hora: ed.data.slice(11, 16), valor: String(ed.valor).replace('.', ','), oferta: ed.ofertaId, chip: ed.chipId, cliente: ed.cliente, ddd: ed.ddd, anuncio: ed.anuncioId ?? '' }
+    : {
+        data: TODAY_ISO, hora: `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`,
+        valor: '', oferta: ofertas[0]?.id ?? '', chip: '', cliente: '', ddd: '', anuncio: '',
+      })
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v })
   const valor = numero(f.valor)
   return (
     <Modal
-      titulo="Venda manual"
+      titulo={ed ? 'Editar venda manual' : 'Venda manual'}
       sub="Para vendas que não chegaram pelo webhook da Leona."
       onClose={onClose}
       podeSalvar={valor > 0 && !!f.oferta}
+      onExcluir={ed ? async () => {
+        const err = await excluir('vendas', String(ed.id), () => tirar(vendas, ed))
+        if (err) return err
+        onClose()
+        await atualizar()
+      } : undefined}
       onSalvar={async () => {
-        const id = `M-${Date.now()}`
+        const id = ed ? String(ed.id) : `M-${Date.now()}`
         const quando = new Date(`${f.data}T${f.hora || '12:00'}:00`)
         const of = ofertas.find((o) => o.id === f.oferta)
         const chip = chips.find((c) => c.id === f.chip)
-        const err = await inserir('vendas', {
-          id, data: quando.toISOString(), valor, leona_product_id: of?.leonaProductId ?? null, produto_nome: f.oferta,
+        const gravarVenda = ed ? (linha: Record<string, unknown>, demo: () => void) => alterar('vendas', id, linha, demo) : (linha: Record<string, unknown>, demo: () => void) => inserir('vendas', { id, ...linha }, demo)
+        const err = await gravarVenda({
+          data: quando.toISOString(), valor, leona_product_id: of?.leonaProductId ?? null, produto_nome: f.oferta,
           anuncio_id: f.anuncio.trim() || null, leona_connection_id: chip?.leonaConnectionId || null, instancia: chip?.nome ?? null,
           ddd: f.ddd.trim() || null, cliente: f.cliente.trim() || null, origem: 'manual',
         }, () => {
+          if (ed) tirar(vendas, ed)
           vendas.unshift({
             id, data: `${f.data}T${f.hora || '12:00'}:00`, valor, ofertaId: f.oferta, anuncioId: f.anuncio.trim() || null,
             chipId: f.chip, ddd: f.ddd.trim(), cliente: f.cliente.trim(), origem: 'manual',

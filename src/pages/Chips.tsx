@@ -2,16 +2,22 @@ import clsx from 'clsx'
 import { Battery, Cpu, HeartPulse, Plus, Skull, Smartphone, Timer } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { aparelhos, chips, despesas, DIAS_HISTORICO, ofertas, vendas } from '../data/mock'
-import type { Chip } from '../data/types'
+import type { Aparelho, Chip } from '../data/types'
 import { Botoes, BotaoAdicionar, Campo, Escolha, Modal, novoId, numero } from '../components/Form'
 import { useApp } from '../lib/app-context'
-import { alterar, inserir } from '../lib/gravar'
+import { alterar, excluir, inserir, tirar } from '../lib/gravar'
 import { addDays, diffDays, isoDate, TODAY, TODAY_ISO } from '../lib/date'
 import { dataCurta, money, money0, telefone } from '../lib/format'
 import { custoDiaChip, fimOperacao, ofertaById, VIDA_MEDIA_CHIP, vidaChip } from '../lib/metrics'
 import { Kpi, PageHeader, Panel, PanelHeader, Pill, Td, Th } from '../components/ui'
 
-type Acao = { tipo: 'novo' } | { tipo: 'aparelho' } | { tipo: 'ativar'; chip: Chip } | { tipo: 'caiu'; chip: Chip }
+type Acao =
+  | { tipo: 'novo' }
+  | { tipo: 'aparelho' }
+  | { tipo: 'ativar'; chip: Chip }
+  | { tipo: 'caiu'; chip: Chip }
+  | { tipo: 'editar'; chip: Chip }
+  | { tipo: 'editarAparelho'; ap: Aparelho }
 
 export default function Chips() {
   const inicio = isoDate(addDays(TODAY, -(DIAS_HISTORICO - 1)))
@@ -119,7 +125,7 @@ export default function Chips() {
                   const rv = receitaChip.get(c.id)
                   const o = c.ofertaId ? ofertaById.get(c.ofertaId) : null
                   return (
-                    <tr key={c.id} className="hover:bg-white/[.02]">
+                    <tr key={c.id} onClick={() => setAcao({ tipo: 'editar', chip: c })} className="cursor-pointer hover:bg-white/[.03]" title="Clique para editar">
                       <Td className="text-ink">{c.nome}</Td>
                       <Td className="num text-xs text-ink-2">{telefone(c.numero)}</Td>
                       <Td>{o ? <span className="num text-xs" style={{ color: o.cor }}>{o.id}</span> : <span className="text-ink-3">—</span>}</Td>
@@ -134,8 +140,8 @@ export default function Chips() {
                       <Td right>{rv?.v ?? 0}</Td>
                       <Td right className={rv ? 'text-emerald' : 'text-ink-3'}>{money0(rv?.r ?? 0)}</Td>
                       <Td right>
-                        {c.status === 'ativo' && <button onClick={() => setAcao({ tipo: 'caiu', chip: c })} className="rounded-lg border border-rose/30 px-2 py-1 text-[11px] text-rose hover:bg-rose/10">Caiu</button>}
-                        {c.status === 'reserva' && <button onClick={() => setAcao({ tipo: 'ativar', chip: c })} className="rounded-lg border border-emerald/30 px-2 py-1 text-[11px] text-emerald hover:bg-emerald/10">Ativar</button>}
+                        {c.status === 'ativo' && <button onClick={(e) => { e.stopPropagation(); setAcao({ tipo: 'caiu', chip: c }) }} className="rounded-lg border border-rose/30 px-2 py-1 text-[11px] text-rose hover:bg-rose/10">Caiu</button>}
+                        {c.status === 'reserva' && <button onClick={(e) => { e.stopPropagation(); setAcao({ tipo: 'ativar', chip: c }) }} className="rounded-lg border border-emerald/30 px-2 py-1 text-[11px] text-emerald hover:bg-emerald/10">Ativar</button>}
                       </Td>
                     </tr>
                   )
@@ -151,7 +157,7 @@ export default function Chips() {
               const meus = chips.filter((c) => c.aparelhoId === a.id && c.ativacao)
               const agora = meus.filter((c) => c.status === 'ativo')
               return (
-                <div key={a.id} className="rounded-xl border border-line bg-surface-2/60 p-3.5">
+                <div key={a.id} onClick={() => setAcao({ tipo: 'editarAparelho', ap: a })} title="Clique para editar" className="cursor-pointer rounded-xl border border-line bg-surface-2/60 p-3.5 transition hover:border-line-2">
                   <div className="flex items-center gap-3">
                     <div className="grid h-10 w-8 place-items-center rounded-lg border border-line-2 bg-bg">
                       <div className={clsx('h-1.5 w-1.5 rounded-full', a.status === 'ok' ? 'bg-emerald shadow-[0_0_8px_#34d399]' : 'bg-amber')} />
@@ -176,6 +182,8 @@ export default function Chips() {
       {acao?.tipo === 'aparelho' && <NovoAparelho onClose={() => setAcao(null)} />}
       {acao?.tipo === 'ativar' && <AtivarChip chip={acao.chip} onClose={() => setAcao(null)} />}
       {acao?.tipo === 'caiu' && <ChipCaiu chip={acao.chip} onClose={() => setAcao(null)} />}
+      {acao?.tipo === 'editar' && <EditarChip chip={acao.chip} onClose={() => setAcao(null)} />}
+      {acao?.tipo === 'editarAparelho' && <EditarAparelho ap={acao.ap} onClose={() => setAcao(null)} />}
     </>
   )
 }
@@ -331,6 +339,98 @@ function NovoAparelho({ onClose }: { onClose: () => void }) {
         <Campo id="ap-valor" label="Valor pago (R$)" tipo="number" value={valor} onChange={setValor} placeholder="opcional" mono />
         <Campo id="ap-data" label="Data da compra" tipo="date" value={data} onChange={setData} />
       </div>
+    </Modal>
+  )
+}
+
+function EditarChip({ chip, onClose }: { chip: Chip; onClose: () => void }) {
+  const { atualizar } = useApp()
+  const [f, setF] = useState({
+    nome: chip.nome, numero: chip.numero, operadora: chip.operadora || 'Claro', custo: String(chip.custo).replace('.', ','),
+    compra: chip.compra, ativacao: chip.ativacao ?? '', queda: chip.queda ?? '', motivo: chip.motivoQueda ?? '',
+    status: chip.status, oferta: chip.ofertaId ?? '', aparelho: chip.aparelhoId ?? '', conexao: chip.leonaConnectionId ? String(chip.leonaConnectionId) : '',
+  })
+  const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v })
+  return (
+    <Modal
+      titulo={`Editar ${chip.nome}`}
+      sub="Corrija qualquer dado do chip. Datas de ativação e queda mudam o custo por dia."
+      onClose={onClose}
+      podeSalvar={!!f.nome.trim() && !!f.numero.trim()}
+      onSalvar={async () => {
+        const db = {
+          nome: f.nome.trim(), numero: f.numero.replace(/\D/g, ''), operadora: f.operadora, custo: numero(f.custo), compra: f.compra,
+          ativacao: f.ativacao || null, queda: f.status === 'caiu' ? f.queda || null : null, motivo_queda: f.status === 'caiu' ? f.motivo || null : null,
+          status: f.status, oferta_id: f.oferta || null, aparelho_id: f.aparelho || null, leona_connection_id: f.conexao ? Number(f.conexao) : null,
+        }
+        const err = await alterar('chips', chip.id, db, () => Object.assign(chip, {
+          nome: db.nome, numero: db.numero, operadora: db.operadora, custo: db.custo, compra: db.compra, ativacao: db.ativacao,
+          queda: db.queda, motivoQueda: db.motivo_queda ?? undefined, status: db.status, ofertaId: db.oferta_id, aparelhoId: f.aparelho,
+          leonaConnectionId: Number(f.conexao) || 0,
+        }))
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+      onExcluir={async () => {
+        const err = await excluir('chips', chip.id, () => tirar(chips, chip))
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+    >
+      <Campo id="ec-nome" label="Nome (conexão na Leona)" value={f.nome} onChange={set('nome')} />
+      <div className="grid grid-cols-2 gap-3">
+        <Campo id="ec-numero" label="Número" tipo="tel" value={f.numero} onChange={set('numero')} mono />
+        <Escolha id="ec-operadora" label="Operadora" value={f.operadora} onChange={set('operadora')} opcoes={['Claro', 'Vivo', 'TIM', 'Oi', 'Outra'].map((v) => ({ v, l: v }))} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Campo id="ec-custo" label="Custo (R$)" tipo="number" value={f.custo} onChange={set('custo')} mono />
+        <Campo id="ec-compra" label="Compra" tipo="date" value={f.compra} onChange={set('compra')} />
+      </div>
+      <Botoes label="Situação" value={f.status} onChange={(v) => setF({ ...f, status: v })} opcoes={[{ v: 'reserva', l: 'Reserva' }, { v: 'ativo', l: 'Ativo' }, { v: 'caiu', l: 'Caiu' }]} />
+      <div className="grid grid-cols-2 gap-3">
+        <Campo id="ec-ativacao" label="Ativado em" tipo="date" value={f.ativacao} onChange={set('ativacao')} />
+        {f.status === 'caiu' && <Campo id="ec-queda" label="Caiu em" tipo="date" value={f.queda} onChange={set('queda')} />}
+      </div>
+      {f.status === 'caiu' && <Escolha id="ec-motivo" label="Motivo da queda" value={f.motivo || MOTIVOS[0]} onChange={set('motivo')} opcoes={MOTIVOS.map((v) => ({ v, l: v }))} />}
+      <Escolha id="ec-oferta" label="Oferta que atende" value={f.oferta} onChange={set('oferta')} opcoes={opOfertas()} />
+      <div className="grid grid-cols-2 gap-3">
+        <Escolha id="ec-aparelho" label="Celular" value={f.aparelho} onChange={set('aparelho')} opcoes={opAparelhos()} />
+        <Campo id="ec-conexao" label="ID conexão Leona" tipo="number" value={f.conexao} onChange={set('conexao')} mono />
+      </div>
+    </Modal>
+  )
+}
+
+function EditarAparelho({ ap, onClose }: { ap: Aparelho; onClose: () => void }) {
+  const { atualizar } = useApp()
+  const [modelo, setModelo] = useState(ap.modelo)
+  const [apelido, setApelido] = useState(ap.apelido)
+  const [status, setStatus] = useState(ap.status)
+  return (
+    <Modal
+      titulo={`Editar ${ap.apelido}`}
+      sub="O valor e a data da compra ficam em Despesas — edite por lá."
+      onClose={onClose}
+      podeSalvar={!!modelo.trim() && !!apelido.trim()}
+      onSalvar={async () => {
+        const campos = { modelo: modelo.trim(), apelido: apelido.trim(), status }
+        const err = await alterar('aparelhos', ap.id, campos, () => Object.assign(ap, campos))
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+      onExcluir={async () => {
+        const err = await excluir('aparelhos', ap.id, () => tirar(aparelhos, ap))
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+    >
+      <Campo id="ea-modelo" label="Modelo" value={modelo} onChange={setModelo} />
+      <Campo id="ea-apelido" label="Apelido" value={apelido} onChange={setApelido} />
+      <Botoes label="Situação" value={status} onChange={setStatus} opcoes={[{ v: 'ok', l: 'Funcionando' }, { v: 'manutencao', l: 'Manutenção' }]} />
     </Modal>
   )
 }

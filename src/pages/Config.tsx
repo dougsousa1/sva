@@ -51,10 +51,24 @@ export default function Config() {
           <PanelHeader title="Imposto do Meta" icon={Percent} sub="aplicado sobre todo gasto que vem da API" />
           <div className="p-5">
             <div className="flex items-center gap-4">
-              <input type="range" min={0} max={0.2} step={0.005} value={imposto} onChange={(e) => setImposto(Number(e.target.value))} className="flex-1 accent-cyan" />
-              <span className="num w-16 text-right text-2xl font-semibold text-cyan">{(imposto * 100).toFixed(1).replace('.', ',')}%</span>
+              <input type="range" min={0} max={0.2} step={0.0005} value={imposto} onChange={(e) => setImposto(Number(e.target.value))} aria-label="Imposto do Meta" className="flex-1 accent-cyan" />
+              <label className="flex items-center gap-1">
+                <input
+                  key={imposto}
+                  defaultValue={(imposto * 100).toFixed(2).replace('.', ',')}
+                  onBlur={(e) => {
+                    const v = Number(e.target.value.replace(',', '.'))
+                    if (Number.isFinite(v) && v >= 0 && v <= 30) setImposto(+(v / 100).toFixed(4))
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                  inputMode="decimal"
+                  aria-label="Imposto em porcentagem"
+                  className="num w-24 rounded-lg border border-line bg-bg/70 px-2 py-1 text-right text-2xl font-semibold text-cyan outline-none focus:border-cyan/60"
+                />
+                <span className="text-2xl font-semibold text-cyan">%</span>
+              </label>
             </div>
-            <p className="mt-3 text-xs text-ink-3">Mude e veja todos os números do sistema (ROAS, CPA, margem) se recalcularem.</p>
+            <p className="mt-3 text-xs text-ink-3">Digite o valor exato (ex.: 12,15) ou arraste. Todos os números do sistema (ROAS, CPA, margem) se recalculam.</p>
           </div>
         </Panel>
 

@@ -1,11 +1,11 @@
-import clsx from 'clsx'
-import { Plus, Receipt, Repeat, X } from 'lucide-react'
+import { Pencil, Plus, Receipt, Repeat } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { despesas as base } from '../data/mock'
 import type { Despesa, DespesaCategoria } from '../data/types'
 import { useApp } from '../lib/app-context'
-import { supabase } from '../lib/supabase'
+import { alterar, excluir, inserir, tirar } from '../lib/gravar'
+import { Botoes, Campo, Escolha, Modal, novoId, numero } from '../components/Form'
 import { TODAY_ISO } from '../lib/date'
 import { dataCurta, money, money0 } from '../lib/format'
 import { inPeriodo, metricasGerais } from '../lib/metrics'
@@ -22,11 +22,10 @@ const cats: Record<DespesaCategoria | 'trafego' | 'imposto', { l: string; c: str
 }
 
 export default function Despesas() {
-  const { periodo, imposto, modo, recarregar } = useApp()
-  const [extras, setExtras] = useState<Despesa[]>([])
-  const [form, setForm] = useState(false)
-  const todas = useMemo(() => [...extras, ...base], [extras])
-  const lista = todas.filter((d) => inPeriodo(d.data, periodo))
+  const { periodo, imposto } = useApp()
+  // null = fechado · 'nova' = lançar · Despesa = editar
+  const [form, setForm] = useState<Despesa | 'nova' | null>(null)
+  const lista = base.filter((d) => inPeriodo(d.data, periodo))
   const g = metricasGerais(periodo, imposto)
 
   const porCat = useMemo(() => {
@@ -42,7 +41,7 @@ export default function Despesas() {
       <PageHeader
         title="Despesas"
         sub="Tráfego e imposto entram sozinhos pela API do Meta. O resto você lança aqui (ou pelo Telegram, futuramente)."
-        right={<button onClick={() => setForm(true)} className="flex items-center gap-1.5 rounded-xl bg-cyan px-3.5 py-2 text-sm font-medium text-bg shadow-[0_0_24px_-6px_#22d3ee] hover:brightness-110"><Plus size={16} /> Lançar despesa</button>}
+        right={<button onClick={() => setForm('nova')} className="flex items-center gap-1.5 rounded-xl bg-cyan px-3.5 py-2 text-sm font-medium text-bg shadow-[0_0_24px_-6px_#22d3ee] hover:brightness-110"><Plus size={16} /> Lançar despesa</button>}
       />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi label="Total do período" value={money0(total)} icon={Receipt} tone="rose" />
@@ -79,18 +78,19 @@ export default function Despesas() {
           </div>
         </Panel>
         <Panel>
-          <PanelHeader title="Lançamentos" icon={Receipt} sub="tráfego diário fica de fora desta lista (vem do Meta)" />
+          <PanelHeader title="Lançamentos" icon={Receipt} sub="clique em um lançamento para editar ou excluir · o tráfego diário vem do Meta" />
           <div className="max-h-[560px] overflow-auto">
             <table className="w-full text-sm whitespace-nowrap">
-              <thead className="sticky top-0 border-b border-line bg-surface"><tr><Th>Data</Th><Th>Descrição</Th><Th>Categoria</Th><Th>Tipo</Th><Th right>Valor</Th></tr></thead>
+              <thead className="sticky top-0 border-b border-line bg-surface"><tr><Th>Data</Th><Th>Descrição</Th><Th>Categoria</Th><Th>Tipo</Th><Th right>Valor</Th><Th /></tr></thead>
               <tbody className="divide-y divide-line/50">
                 {lista.map((d) => (
-                  <tr key={d.id} className={clsx('hover:bg-white/[.02]', extras.includes(d) && 'bg-cyan/5')}>
+                  <tr key={d.id} onClick={() => setForm(d)} className="cursor-pointer hover:bg-white/[.03]" title="Editar">
                     <Td className="num text-xs text-ink-2">{dataCurta(d.data)}</Td>
                     <Td className="text-ink">{d.descricao}</Td>
                     <Td><span className="flex items-center gap-1.5 text-xs text-ink-2"><span className="h-2 w-2 rounded-sm" style={{ background: cats[d.categoria].c }} />{cats[d.categoria].l}</span></Td>
                     <Td>{d.tipo === 'recorrente_mensal' ? <Pill tone="cyan"><Repeat size={10} /> mensal</Pill> : <Pill>pontual</Pill>}</Td>
                     <Td right className="text-rose">{money(d.valor)}</Td>
+                    <Td right className="text-ink-3"><Pencil size={13} /></Td>
                   </tr>
                 ))}
               </tbody>
@@ -99,66 +99,50 @@ export default function Despesas() {
         </Panel>
       </div>
 
-      {form && <NovaDespesa onClose={() => setForm(false)} onSave={async (d) => {
-        if (modo === 'live' && supabase) {
-          const { error } = await supabase.from('despesas').insert({ data: d.data, categoria: d.categoria, descricao: d.descricao, valor: d.valor, tipo: d.tipo })
-          if (error) return error.message
-          setForm(false)
-          await recarregar()
-          return
-        }
-        setExtras((x) => [d, ...x])
-        setForm(false)
-      }} />}
+      {form && <FormDespesa d={form === 'nova' ? null : form} onClose={() => setForm(null)} />}
     </>
   )
 }
 
-function NovaDespesa({ onClose, onSave }: { onClose: () => void; onSave: (d: Despesa) => Promise<string | void> }) {
-  const { modo } = useApp()
-  const [erro, setErro] = useState('')
-  const [descricao, setDescricao] = useState('')
-  const [valor, setValor] = useState('')
-  const [categoria, setCategoria] = useState<DespesaCategoria>('chips')
-  const [tipo, setTipo] = useState<Despesa['tipo']>('pontual')
-  const [data, setData] = useState(TODAY_ISO)
-  const v = Number(valor.replace(',', '.'))
-  const ok = descricao.trim() && v > 0
-  const input = 'w-full rounded-xl border border-line bg-bg/70 px-3 py-2.5 text-sm outline-none focus:border-cyan/60 focus:shadow-[0_0_0_3px_rgba(34,211,238,.12)]'
+function FormDespesa({ d, onClose }: { d: Despesa | null; onClose: () => void }) {
+  const { atualizar } = useApp()
+  const [f, setF] = useState({
+    descricao: d?.descricao ?? '',
+    valor: d ? String(d.valor).replace('.', ',') : '',
+    categoria: (d?.categoria ?? 'chips') as DespesaCategoria,
+    tipo: (d?.tipo ?? 'pontual') as Despesa['tipo'],
+    data: d?.data ?? TODAY_ISO,
+  })
+  const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v })
+  const valor = numero(f.valor)
+  const linha = { data: f.data, categoria: f.categoria, descricao: f.descricao.trim(), valor, tipo: f.tipo }
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
-      <form
-        className="panel panel-glow w-full max-w-md p-6"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={async (e) => { e.preventDefault(); if (ok) setErro((await onSave({ id: `NEW${Date.now()}`, data, categoria, descricao, valor: v, tipo })) ?? '') }}
-      >
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="font-display text-lg font-semibold">Lançar despesa</h3>
-          <button type="button" onClick={onClose} className="text-ink-3 hover:text-ink"><X size={18} /></button>
-        </div>
-        <div className="space-y-3.5">
-          <label className="block text-xs text-ink-2">Descrição<input autoFocus className={clsx(input, 'mt-1.5')} value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Ex.: 5 chips Claro" /></label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-xs text-ink-2">Valor (R$)<input inputMode="decimal" className={clsx(input, 'num mt-1.5')} value={valor} onChange={(e) => setValor(e.target.value)} placeholder="75,00" /></label>
-            <label className="block text-xs text-ink-2">Data<input type="date" className={clsx(input, 'mt-1.5 [color-scheme:dark]')} value={data} onChange={(e) => setData(e.target.value)} /></label>
-          </div>
-          <label className="block text-xs text-ink-2">Categoria
-            <select className={clsx(input, 'mt-1.5')} value={categoria} onChange={(e) => setCategoria(e.target.value as DespesaCategoria)}>
-              {(['chips', 'aparelhos', 'plataforma', 'ia', 'outros'] as const).map((c) => <option key={c} value={c}>{cats[c].l}</option>)}
-            </select>
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            {(['pontual', 'recorrente_mensal'] as const).map((t) => (
-              <button type="button" key={t} onClick={() => setTipo(t)} className={clsx('rounded-xl border px-3 py-2.5 text-sm', tipo === t ? 'border-cyan/50 bg-cyan/10 text-cyan' : 'border-line text-ink-2')}>
-                {t === 'pontual' ? 'Pontual' : 'Mensal'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button disabled={!ok} className="mt-6 w-full rounded-xl bg-cyan py-2.5 text-sm font-semibold text-bg disabled:opacity-40">Salvar</button>
-        {erro && <p className="mt-2.5 text-center text-xs text-rose">{erro}</p>}
-        {modo === 'demo' && <p className="mt-2.5 text-center text-[11px] text-ink-3">Modo demonstração: fica só nesta sessão até ligarmos o banco.</p>}
-      </form>
-    </div>
+    <Modal
+      titulo={d ? 'Editar despesa' : 'Lançar despesa'}
+      onClose={onClose}
+      podeSalvar={!!f.descricao.trim() && valor > 0}
+      onSalvar={async () => {
+        const err = d
+          ? await alterar('despesas', d.id, linha, () => Object.assign(d, linha))
+          : await inserir('despesas', linha, () => { base.unshift({ id: novoId('DP'), ...linha }) })
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+      onExcluir={d ? async () => {
+        const err = await excluir('despesas', d.id, () => tirar(base, d))
+        if (err) return err
+        onClose()
+        await atualizar()
+      } : undefined}
+    >
+      <Campo id="dp-descricao" label="Descrição" value={f.descricao} onChange={set('descricao')} placeholder="Ex.: 5 chips Claro" />
+      <div className="grid grid-cols-2 gap-3">
+        <Campo id="dp-valor" label="Valor (R$)" tipo="number" value={f.valor} onChange={set('valor')} placeholder="75,00" mono />
+        <Campo id="dp-data" label="Data" tipo="date" value={f.data} onChange={set('data')} />
+      </div>
+      <Escolha id="dp-categoria" label="Categoria" value={f.categoria} onChange={set('categoria')} opcoes={(['chips', 'aparelhos', 'plataforma', 'ia', 'outros'] as const).map((c) => ({ v: c, l: cats[c].l }))} />
+      <Botoes label="Tipo" value={f.tipo} onChange={(v) => setF({ ...f, tipo: v })} opcoes={[{ v: 'pontual', l: 'Pontual' }, { v: 'recorrente_mensal', l: 'Mensal' }]} />
+    </Modal>
   )
 }

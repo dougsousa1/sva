@@ -29,3 +29,19 @@ function traduzir(msg: string) {
   if (/duplicate key/i.test(msg)) return 'Já existe um registro com esse código.'
   return msg
 }
+
+export async function excluir(tabela: string, id: string, demo: () => void): Promise<string | void> {
+  if (supabase) {
+    const { error } = await supabase.from(tabela).delete().eq('id', id)
+    if (error) return traduzir(error.message)
+    return
+  }
+  demo()
+  rebuildIndexes()
+}
+
+/** Remove um item de um array dos dados de demonstração. */
+export function tirar<T>(arr: T[], item: T) {
+  const i = arr.indexOf(item)
+  if (i >= 0) arr.splice(i, 1)
+}

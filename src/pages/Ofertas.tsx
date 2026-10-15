@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ExternalLink, Lightbulb, Plus, Sparkles, Target, X } from 'lucide-react'
+import { ExternalLink, Lightbulb, Pencil, Plus, Sparkles, Target, X } from 'lucide-react'
 import { useMemo, useState, type DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -10,6 +10,8 @@ import { addDays, isoDate, parseDate } from '../lib/date'
 import { dataCurta, money, money0, num, pct, x2 } from '../lib/format'
 import { metricasOferta, rebuildIndexes, serieDiaria, type Metricas } from '../lib/metrics'
 import { supabase } from '../lib/supabase'
+import { alterar, excluir, tirar } from '../lib/gravar'
+import { Campo, Modal, numero } from '../components/Form'
 import { ChartTip, PageHeader, Panel, Pill, Segmented, StatusBadge, Thumb, statusLabel } from '../components/ui'
 
 const colunas: OfertaStatus[] = ['ideia', 'producao', 'testando', 'escalando', 'pausada', 'morta']
@@ -216,6 +218,7 @@ function CardOferta({ o, m, onClick, arrastando, onDragStart, onDragEnd }: {
 
 function Detalhe({ o, onClose, onMover }: { o: Oferta; onClose: () => void; onMover: (st: OfertaStatus) => void }) {
   const { imposto } = useApp()
+  const [editar, setEditar] = useState(false)
   const p30 = { inicio: isoDate(addDays(parseDate(isoDate(new Date())), -29)), fim: isoDate(new Date()) }
   const m = metricasOferta(o.id, p30, imposto)
   const serie = serieDiaria(p30, imposto, o.id)
@@ -237,8 +240,12 @@ function Detalhe({ o, onClose, onMover }: { o: Oferta; onClose: () => void; onMo
             <h2 className="mt-2 font-display text-2xl font-semibold">{o.nome}</h2>
             <p className="mt-1 text-sm text-ink-2">{o.promessa}</p>
           </div>
-          <button onClick={onClose} className="rounded-lg border border-line p-2 text-ink-2 hover:text-ink"><X size={16} /></button>
+          <div className="flex gap-2">
+            <button onClick={() => setEditar(true)} className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-xs text-ink-2 hover:text-ink"><Pencil size={13} /> Editar</button>
+            <button onClick={onClose} className="rounded-lg border border-line p-2 text-ink-2 hover:text-ink"><X size={16} /></button>
+          </div>
         </div>
+        {editar && <EditarOferta o={o} onClose={() => setEditar(false)} onExcluida={onClose} />}
 
         <div className="mt-4">
           <div className="mb-1.5 text-[11px] tracking-[0.1em] text-ink-3 uppercase">Mover para</div>
@@ -433,5 +440,58 @@ export function NovaOferta({ onClose, onSalvar, inicial, titulo = 'Nova oferta' 
       </form>
     </div>,
     document.body,
+  )
+}
+
+function EditarOferta({ o, onClose, onExcluida }: { o: Oferta; onClose: () => void; onExcluida: () => void }) {
+  const { atualizar } = useApp()
+  const [f, setF] = useState({
+    nome: o.nome, nicho: o.nicho, ticket: String(o.ticket).replace('.', ','), promessa: o.promessa, angulo: o.angulo,
+    produtoOrigem: o.produtoOrigem, fonteValidacao: o.fonteValidacao, leona: o.leonaProductId ? String(o.leonaProductId) : '', cor: o.cor,
+  })
+  const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v })
+  return (
+    <Modal
+      titulo={<>Editar oferta <span className="num ml-1 text-sm text-cyan">{o.id}</span></>}
+      onClose={onClose}
+      podeSalvar={!!f.nome.trim()}
+      onSalvar={async () => {
+        const db = {
+          nome: f.nome.trim(), nicho: f.nicho.trim(), ticket: numero(f.ticket), promessa: f.promessa.trim(), angulo: f.angulo.trim(),
+          produto_origem: f.produtoOrigem.trim(), fonte_validacao: f.fonteValidacao.trim(), leona_product_id: f.leona ? Number(f.leona) : null, cor: f.cor,
+        }
+        const err = await alterar('ofertas', o.id, db, () => Object.assign(o, {
+          nome: db.nome, nicho: db.nicho, ticket: db.ticket, promessa: db.promessa, angulo: db.angulo,
+          produtoOrigem: db.produto_origem, fonteValidacao: db.fonte_validacao, leonaProductId: db.leona_product_id ?? undefined, cor: db.cor,
+        }))
+        if (err) return err
+        onClose()
+        await atualizar()
+      }}
+      onExcluir={async () => {
+        const err = await excluir('ofertas', o.id, () => tirar(ofertas, o))
+        if (err) return err
+        onClose()
+        onExcluida()
+        await atualizar()
+      }}
+    >
+      <Campo id="eo-nome" label="Nome" value={f.nome} onChange={set('nome')} />
+      <div className="grid grid-cols-2 gap-3">
+        <Campo id="eo-nicho" label="Nicho" value={f.nicho} onChange={set('nicho')} />
+        <Campo id="eo-ticket" label="Ticket (R$)" tipo="number" value={f.ticket} onChange={set('ticket')} mono />
+      </div>
+      <Campo id="eo-origem" label="Produto validado de origem" value={f.produtoOrigem} onChange={set('produtoOrigem')} />
+      <Campo id="eo-fonte" label="Fonte da validação" value={f.fonteValidacao} onChange={set('fonteValidacao')} />
+      <Campo id="eo-promessa" label="Promessa" value={f.promessa} onChange={set('promessa')} />
+      <Campo id="eo-angulo" label="Ângulo" value={f.angulo} onChange={set('angulo')} />
+      <div className="grid grid-cols-[1fr_auto] items-end gap-3">
+        <Campo id="eo-leona" label="ID do produto na Leona (liga as vendas)" tipo="number" value={f.leona} onChange={set('leona')} mono />
+        <label htmlFor="eo-cor" className="block text-xs text-ink-2">Cor
+          <input id="eo-cor" type="color" value={f.cor} onChange={(e) => set('cor')(e.target.value)} className="mt-1.5 block h-[42px] w-14 cursor-pointer rounded-xl border border-line bg-bg/70 p-1" />
+        </label>
+      </div>
+      <p className="text-[11px] text-ink-3">Excluir a oferta apaga também os aprendizados dela; campanhas, criativos e chips ficam sem oferta.</p>
+    </Modal>
   )
 }
