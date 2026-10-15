@@ -53,7 +53,9 @@ export interface Conjunto {
 export interface Campanha {
   id: string
   nome: string
-  ofertaId: string | null // null = fora do padrão de nomes
+  ofertaId: string | null // null = sem oferta
+  /** como a oferta foi ligada: escolhida à mão, código [OFxx] no nome, ou reconhecida pelo nome */
+  vinculo?: 'manual' | 'codigo' | 'auto' | null
   contaId: string
   status: MetaStatus
   criadaEm: string

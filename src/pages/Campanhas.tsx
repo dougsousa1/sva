@@ -23,6 +23,7 @@ export default function Campanhas() {
   const ads = useMemo(() => new Map(metricasAnuncios(periodo, imposto).map((a) => [a.info.anuncio.id, a])), [periodo, imposto])
   const lista = campanhas.filter((c) => !soAtivas || c.status === 'ativo')
   const semVinculo = campanhas.filter((c) => !c.ofertaId).length
+  const autoVinculo = campanhas.filter((c) => c.vinculo === 'auto').length
 
   const toggle = (id: string) => setAbertas((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
@@ -62,7 +63,7 @@ export default function Campanhas() {
           </div>
           <div className="text-sm">
             <div className="font-medium">Padrão de nomes</div>
-            <div className="text-xs text-ink-3">{semVinculo ? `${semVinculo} campanha(s) sem código [OFxx]` : 'todas vinculadas'}</div>
+            <div className="text-xs text-ink-3">{semVinculo ? `${semVinculo} campanha(s) sem oferta` : 'todas ligadas a uma oferta'}{autoVinculo ? ` · ${autoVinculo} reconhecida(s) pelo nome` : ''}</div>
           </div>
         </div>
       </div>
@@ -94,7 +95,16 @@ export default function Campanhas() {
                         </div>
                       </td>
                       <td className="px-4" onClick={(e) => e.stopPropagation()}>
-                        {camp.ofertaId || modo === 'demo' ? <OfertaTag id={camp.ofertaId} nome={false} /> : <Vincular campanhaId={camp.id} />}
+                        {modo === 'demo' ? (
+                          <OfertaTag id={camp.ofertaId} nome={false} />
+                        ) : camp.ofertaId && camp.vinculo !== 'auto' ? (
+                          <OfertaTag id={camp.ofertaId} nome={false} />
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <Vincular campanhaId={camp.id} atual={camp.ofertaId} />
+                            {camp.vinculo === 'auto' && <span title="Reconhecida pelo nome da campanha. Troque se estiver errada." className="text-[10px] text-cyan">auto</span>}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4"><Pill tone={stTone[camp.status]}>{camp.status}</Pill></td>
                       <td className="num px-4 text-right">{money0(camp.conjuntos.reduce((t, c) => t + c.orcamentoDia, 0))}</td>
@@ -145,18 +155,18 @@ function Linha({ s }: { s: ReturnType<typeof soma> }) {
 }
 
 /** Liga uma campanha fora do padrão [OFxx] a uma oferta (grava no banco). */
-function Vincular({ campanhaId }: { campanhaId: string }) {
+function Vincular({ campanhaId, atual }: { campanhaId: string; atual?: string | null }) {
   const { recarregar } = useApp()
   return (
     <select
-      defaultValue=""
+      defaultValue={atual ?? ''}
       aria-label="Vincular a uma oferta"
       onChange={async (e) => {
         if (!supabase || !e.target.value) return
         await supabase.from('meta_campanhas').update({ oferta_id: e.target.value }).eq('id', campanhaId)
         await recarregar()
       }}
-      className="rounded-md border border-amber/40 bg-amber/10 px-1.5 py-0.5 text-[11px] text-amber outline-none"
+      className={atual ? 'rounded-md border border-cyan/40 bg-cyan/10 px-1.5 py-0.5 text-[11px] text-cyan outline-none' : 'rounded-md border border-amber/40 bg-amber/10 px-1.5 py-0.5 text-[11px] text-amber outline-none'}
     >
       <option value="">vincular…</option>
       {ofertas.map((o) => <option key={o.id} value={o.id}>{o.id} · {o.nome}</option>)}

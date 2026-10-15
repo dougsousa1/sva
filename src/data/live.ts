@@ -2,6 +2,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isoDate } from '../lib/date'
 import { rebuildIndexes } from '../lib/metrics'
+import { ofertaPeloNome } from '../lib/vinculo'
 import { aparelhos, aprendizados, campanhas, chips, contas, criativos, despesas, insights, ofertas, vendas } from './mock'
 import type { Campanha, Chip, MetaStatus, OfertaStatus } from './types'
 
@@ -62,7 +63,12 @@ export async function carregarAoVivo(sb: SupabaseClient): Promise<{ imposto: num
     const parsed = codigoOferta(c.nome)
     return {
       id: c.id, nome: c.nome, contaId: c.conta_id, status: c.status as MetaStatus, criadaEm: (c.criada_em ?? '').slice(0, 10),
-      ofertaId: c.oferta_id ?? (parsed && ofertaIds.has(parsed) ? parsed : null),
+      ...(() => {
+        if (c.oferta_id) return { ofertaId: c.oferta_id as string, vinculo: 'manual' as const }
+        if (parsed && ofertaIds.has(parsed)) return { ofertaId: parsed, vinculo: 'codigo' as const }
+        const auto = ofertaPeloNome(c.nome, ofertas)
+        return { ofertaId: auto, vinculo: auto ? ('auto' as const) : null }
+      })(),
       // Uma linha por anúncio (ABO 1-3-1 = 1 anúncio por conjunto; se houver mais, cada um vira uma linha)
       conjuntos: (conjuntosPorCamp.get(c.id) ?? []).flatMap((s) =>
         (anunciosPorConj.get(s.id) ?? []).map((a) => ({

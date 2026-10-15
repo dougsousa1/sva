@@ -98,10 +98,10 @@ export default function Layout() {
   const { preset, setPreset, imposto, modo, versao, sair } = useApp()
   const integracoes: [string, string, boolean][] =
     modo === 'demo'
-      ? [['Meta Ads API', 'aguardando', false], ['Leona webhook', 'aguardando', false], ['Telegram bot', 'aguardando', false], ['Supabase', 'aguardando', false]]
+      ? [['Meta Ads API', 'aguardando', false], ['Leona vendas', 'aguardando', false], ['Telegram bot', 'aguardando', false], ['Supabase', 'aguardando', false]]
       : [
           ['Meta Ads API', campanhas.length ? 'conectado' : 'sem dados', campanhas.length > 0],
-          ['Leona webhook', vendas.length ? 'recebendo' : 'sem vendas', vendas.length > 0],
+          ['Leona vendas', vendas.length ? 'recebendo' : 'sem vendas', vendas.length > 0],
           ['Telegram bot', 'aguardando', false],
           ['Supabase', 'conectado', true],
         ]
