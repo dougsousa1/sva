@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Copy, ExternalLink, Loader2, MessageCircle, Pause, Play, Plus, Radar as RadarIcon, Search, Star, Trash2, X } from 'lucide-react'
+import { Copy, ExternalLink, Loader2, MessageCircle, Pause, Play, Plus, Radar as RadarIcon, RefreshCw, Search, Star, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { radarAnuncios, radarExecucoes, radarPalavras, ofertas } from '../data/mock'
@@ -56,6 +56,16 @@ export default function Radar() {
     }
   }
 
+  /** Baixa o que o Apify já terminou (sem iniciar busca nova, não gasta crédito). */
+  async function conferirAgora() {
+    if (!supabase) return
+    setBusca({ estado: 'rodando', msg: 'Conferindo coletas no Apify…' })
+    const r = await supabase.functions.invoke('radar-sync', { body: { acao: 'coletar' } })
+    await recarregar()
+    if (r.error || !r.data?.ok) setBusca({ estado: 'erro', msg: r.data?.erro ?? r.error?.message ?? 'falhou ao conferir' })
+    else setBusca({ estado: 'parado', msg: `${r.data.novos} anúncio(s) novo(s).` })
+  }
+
   /** Inicia as coletas no Apify e vai conferindo a cada 20 s até terminarem (máx. ~6 min). */
   async function buscarAgora(palavraId?: string) {
     if (!supabase) return
@@ -110,6 +120,7 @@ export default function Radar() {
       />
 
       <Palavras onBuscar={modo === 'live' ? buscarAgora : undefined} onMudou={async () => { await atualizar() }} buscando={busca.estado === 'rodando'} />
+      {modo === 'live' && radarExecucoes.length > 0 && <Execucoes onConferir={conferirAgora} conferindo={busca.estado === 'rodando'} />}
 
       <div className="mt-6 mb-4 flex flex-wrap items-center gap-3">
         <Segmented
@@ -143,7 +154,7 @@ export default function Radar() {
       ) : (
         <Panel className="p-8 text-center text-sm text-ink-3">
           {aba === 'novo'
-            ? radarPalavras.length ? 'Nenhum anúncio novo. Clique em “Buscar agora” ou espere a busca diária.' : 'Cadastre as palavras-chave acima para começar a garimpar.'
+            ? radarPalavras.length ? 'Nenhum anúncio novo ainda. Veja o andamento em “Buscas recentes” acima.' : 'Cadastre as palavras-chave acima para começar a garimpar.'
             : 'Nada aqui ainda.'}
         </Panel>
       )}
@@ -363,5 +374,37 @@ function VerAnuncio({ a, onClose }: { a: RadarAnuncio; onClose: () => void }) {
       </div>
     </div>,
     document.body,
+  )
+}
+
+function Execucoes({ onConferir, conferindo }: { onConferir: () => void; conferindo: boolean }) {
+  const recentes = [...radarExecucoes].sort((a, b) => (a.iniciadoEm < b.iniciadoEm ? 1 : -1)).slice(0, 6)
+  const pendentes = recentes.filter((e) => e.status === 'rodando').length
+  return (
+    <Panel className="mt-4">
+      <PanelHeader
+        title="Buscas recentes"
+        icon={Search}
+        sub="Cada busca roda no Apify e leva de 1 a 5 minutos."
+        right={
+          <button onClick={onConferir} disabled={conferindo} className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:text-ink disabled:opacity-50">
+            {conferindo ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Conferir agora{pendentes ? ` (${pendentes} rodando)` : ''}
+          </button>
+        }
+      />
+      <div className="divide-y divide-line/60">
+        {recentes.map((e) => (
+          <div key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5 text-xs">
+            <span className={clsx('h-2 w-2 shrink-0 rounded-full', e.status === 'rodando' ? 'animate-pulse bg-amber' : e.status === 'falhou' ? 'bg-rose' : e.itens ? 'bg-emerald' : 'bg-ink-3')} />
+            <span className="font-medium text-ink">{e.termo}</span>
+            <span className="text-ink-3">{new Date(e.iniciadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+            <span className={clsx(e.status === 'falhou' ? 'text-rose' : e.status === 'rodando' ? 'text-amber' : 'text-ink-2')}>
+              {e.status === 'rodando' ? 'coletando…' : e.status === 'falhou' ? 'falhou' : `${e.itens ?? 0} anúncio(s)`}
+            </span>
+            {e.erro && <span className="w-full pl-5 text-[11px] break-words text-ink-3">{e.erro}</span>}
+          </div>
+        ))}
+      </div>
+    </Panel>
   )
 }

@@ -117,7 +117,7 @@ export async function carregarAoVivo(sb: SupabaseClient): Promise<{ imposto: num
     ativo: !!a.ativo, variacoes: a.variacoes ?? 1, plataformas: a.plataformas ?? [], preco: a.preco === null ? null : num(a.preco),
     whatsapp: !!a.whatsapp, nota: a.nota ?? 0, status: a.status,
   })))
-  trocar(radarExecucoes, re.map((e) => ({ id: e.id, termo: e.termo, status: e.status, itens: e.itens, iniciadoEm: e.iniciado_em })))
+  trocar(radarExecucoes, re.map((e) => ({ id: e.id, termo: e.termo, status: e.status, itens: e.itens, erro: e.erro, iniciadoEm: e.iniciado_em })))
   rebuildIndexes()
   const imp = cfg.find((c) => c.chave === 'imposto_meta')?.valor
   return { imposto: typeof imp === 'number' ? imp : 0.13 }

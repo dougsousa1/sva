@@ -184,5 +184,6 @@ export interface RadarExecucao {
   termo: string
   status: 'rodando' | 'concluida' | 'falhou'
   itens: number | null
+  erro: string | null
   iniciadoEm: string
 }

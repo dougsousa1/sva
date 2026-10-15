@@ -150,7 +150,8 @@ async function coletar() {
     const st = run?.data?.status
     if (st === 'RUNNING' || st === 'READY') continue
     if (st !== 'SUCCEEDED') {
-      await supabase.from('radar_execucoes').update({ status: 'falhou', erro: st, finalizado_em: new Date().toISOString() }).eq('id', e.id)
+      const motivo = run?.data?.statusMessage ? `${st}: ${run.data.statusMessage}` : st
+      await supabase.from('radar_execucoes').update({ status: 'falhou', erro: motivo, finalizado_em: new Date().toISOString() }).eq('id', e.id)
       continue
     }
     const itens: Json[] = (await apify(`/datasets/${run.data.defaultDatasetId}/items?clean=true&format=json`)) ?? []
@@ -163,7 +164,11 @@ async function coletar() {
       const { error } = await supabase.from('radar_anuncios').upsert(linhas.slice(i, i + 200), { ignoreDuplicates: false })
       if (error) throw new Error(`radar_anuncios: ${error.message}`)
     }
-    await supabase.from('radar_execucoes').update({ status: 'concluida', itens: linhas.length, finalizado_em: new Date().toISOString() }).eq('id', e.id)
+    // Se veio coisa do Apify mas nada foi reconhecido, guarda as chaves do 1º item para ajustarmos a leitura
+    const erro = itens.length && !linhas.length
+      ? `formato não reconhecido (${itens.length} itens). Chaves: ${Object.keys(itens[0] ?? {}).slice(0, 25).join(', ')}`
+      : itens.length === 0 ? 'o Apify não encontrou anúncios para esta palavra' : null
+    await supabase.from('radar_execucoes').update({ status: 'concluida', itens: linhas.length, erro, finalizado_em: new Date().toISOString() }).eq('id', e.id)
   }
   return { pendentes: (pendentes ?? []).length, novos }
 }
