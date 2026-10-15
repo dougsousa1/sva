@@ -1,22 +1,46 @@
 import clsx from 'clsx'
 import { ExternalLink, Lightbulb, Plus, Sparkles, Target, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type DragEvent } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { aprendizados, chips, criativos, ofertas } from '../data/mock'
 import type { Oferta, OfertaStatus } from '../data/types'
 import { useApp } from '../lib/app-context'
 import { addDays, isoDate, parseDate } from '../lib/date'
 import { dataCurta, money, money0, num, pct, x2 } from '../lib/format'
-import { metricasOferta, serieDiaria, type Metricas } from '../lib/metrics'
+import { metricasOferta, rebuildIndexes, serieDiaria, type Metricas } from '../lib/metrics'
+import { supabase } from '../lib/supabase'
 import { ChartTip, PageHeader, Panel, Pill, Segmented, StatusBadge, Thumb, statusLabel } from '../components/ui'
 
 const colunas: OfertaStatus[] = ['ideia', 'producao', 'testando', 'escalando', 'pausada', 'morta']
 
 export default function Ofertas() {
-  const { periodo, imposto } = useApp()
+  const { periodo, imposto, modo: modoDados, recarregar } = useApp()
   const [aberta, setAberta] = useState<Oferta | null>(null)
   const [modo, setModo] = useState<'pipeline' | 'tabela'>('pipeline')
-  const met = useMemo(() => new Map(ofertas.map((o) => [o.id, metricasOferta(o.id, periodo, imposto)])), [periodo, imposto])
+  const [, setTick] = useState(0)
+  const [alvo, setAlvo] = useState<OfertaStatus | null>(null)
+  const [arrastando, setArrastando] = useState<string | null>(null)
+  const [erro, setErro] = useState('')
+  const [nova, setNova] = useState(false)
+  const met = useMemo(() => new Map(ofertas.map((o) => [o.id, metricasOferta(o.id, periodo, imposto)])), [periodo, imposto, ofertas.length])
+
+  /** Muda a etapa da oferta na hora e grava no banco (desfaz se o banco recusar). */
+  async function mover(id: string, st: OfertaStatus) {
+    const o = ofertas.find((x) => x.id === id)
+    if (!o || o.status === st) return
+    const antes = o.status
+    o.status = st
+    setTick((t) => t + 1)
+    setErro('')
+    if (modoDados === 'live' && supabase) {
+      const { error } = await supabase.from('ofertas').update({ status: st }).eq('id', id)
+      if (error) {
+        o.status = antes
+        setTick((t) => t + 1)
+        setErro(`Não salvou a mudança de ${o.nome}: ${error.message}`)
+      }
+    }
+  }
 
   return (
     <>
@@ -26,27 +50,67 @@ export default function Ofertas() {
         right={
           <div className="flex items-center gap-2">
             <Segmented value={modo} onChange={setModo} options={[{ id: 'pipeline', label: 'Pipeline' }, { id: 'tabela', label: 'Tabela' }]} />
-            <button className="flex items-center gap-1.5 rounded-xl bg-cyan px-3.5 py-2 text-sm font-medium text-bg shadow-[0_0_24px_-6px_#22d3ee] hover:brightness-110">
+            <button onClick={() => setNova(true)} className="flex items-center gap-1.5 rounded-xl bg-cyan px-3.5 py-2 text-sm font-medium text-bg shadow-[0_0_24px_-6px_#22d3ee] hover:brightness-110">
               <Plus size={16} /> Nova oferta
             </button>
           </div>
         }
       />
 
+      {erro && <p className="mb-3 rounded-xl border border-rose/30 bg-rose/5 px-3 py-2 text-sm text-rose">{erro}</p>}
+      {modo === 'pipeline' && <p className="mb-3 text-xs text-ink-3">Arraste os cards entre as colunas para mudar a etapa. No celular, toque no card e use “Mover para”.</p>}
       {modo === 'pipeline' ? (
         <div className="-mx-4 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0">
           <div className="grid min-w-[960px] grid-cols-6 gap-3">
             {colunas.map((st) => {
               const lista = ofertas.filter((o) => o.status === st)
               return (
-                <div key={st} className="rounded-2xl border border-line bg-surface/40 p-2.5">
+                <div
+                  key={st}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    if (alvo !== st) setAlvo(st)
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setAlvo(null)
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const id = e.dataTransfer.getData('text/plain')
+                    setAlvo(null)
+                    setArrastando(null)
+                    if (id) mover(id, st)
+                  }}
+                  className={clsx(
+                    'min-h-[240px] rounded-2xl border p-2.5 transition',
+                    alvo === st ? 'border-cyan/60 bg-cyan/[.06] shadow-[0_0_0_1px_rgba(34,211,238,.25)_inset]' : 'border-line bg-surface/40',
+                  )}
+                >
                   <div className="mb-2.5 flex items-center justify-between px-1.5">
                     <StatusBadge s={st} />
                     <span className="num text-xs text-ink-3">{lista.length}</span>
                   </div>
                   <div className="space-y-2.5">
-                    {lista.map((o) => <CardOferta key={o.id} o={o} m={met.get(o.id)!} onClick={() => setAberta(o)} />)}
-                    {!lista.length && <div className="rounded-xl border border-dashed border-line px-3 py-6 text-center text-xs text-ink-3">vazio</div>}
+                    {lista.map((o) => (
+                      <CardOferta
+                        key={o.id}
+                        o={o}
+                        m={met.get(o.id) ?? metricasOferta(o.id, periodo, imposto)}
+                        onClick={() => setAberta(o)}
+                        arrastando={arrastando === o.id}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', o.id)
+                          e.dataTransfer.effectAllowed = 'move'
+                          setArrastando(o.id)
+                        }}
+                        onDragEnd={() => {
+                          setArrastando(null)
+                          setAlvo(null)
+                        }}
+                      />
+                    ))}
+                    {!lista.length && <div className="rounded-xl border border-dashed border-line px-3 py-6 text-center text-xs text-ink-3">{alvo === st ? 'solte aqui' : 'vazio'}</div>}
                   </div>
                 </div>
               )
@@ -66,7 +130,7 @@ export default function Ofertas() {
               </thead>
               <tbody className="divide-y divide-line/60">
                 {ofertas.map((o) => {
-                  const m = met.get(o.id)!
+                  const m = met.get(o.id) ?? metricasOferta(o.id, periodo, imposto)
                   return (
                     <tr key={o.id} onClick={() => setAberta(o)} className="cursor-pointer hover:bg-white/[.02]">
                       <td className="px-5 py-3"><span className="num mr-2 text-xs" style={{ color: o.cor }}>{o.id}</span>{o.nome}</td>
@@ -90,15 +154,52 @@ export default function Ofertas() {
         </Panel>
       )}
 
-      {aberta && <Detalhe o={aberta} onClose={() => setAberta(null)} />}
+      {aberta && <Detalhe o={aberta} onClose={() => setAberta(null)} onMover={(st) => mover(aberta.id, st)} />}
+      {nova && (
+        <NovaOferta
+          onClose={() => setNova(false)}
+          onSalvar={async (o) => {
+            if (modoDados === 'live' && supabase) {
+              const { error } = await supabase.from('ofertas').insert({
+                id: o.id, nome: o.nome, nicho: o.nicho, ticket: o.ticket, status: o.status, cor: o.cor,
+                promessa: o.promessa, angulo: o.angulo, produto_origem: o.produtoOrigem, fonte_validacao: o.fonteValidacao,
+              })
+              if (error) return error.message
+              setNova(false)
+              await recarregar()
+              return
+            }
+            ofertas.push(o)
+            rebuildIndexes()
+            setNova(false)
+            setTick((t) => t + 1)
+          }}
+        />
+      )}
     </>
   )
 }
 
-function CardOferta({ o, m, onClick }: { o: Oferta; m: Metricas; onClick: () => void }) {
+function CardOferta({ o, m, onClick, arrastando, onDragStart, onDragEnd }: {
+  o: Oferta
+  m: Metricas
+  onClick: () => void
+  arrastando: boolean
+  onDragStart: (e: DragEvent<HTMLButtonElement>) => void
+  onDragEnd: () => void
+}) {
   const ativo = m.gasto > 0 || m.vendas > 0
   return (
-    <button onClick={onClick} className="group block w-full rounded-xl border border-line bg-surface-2/70 p-3 text-left transition hover:-translate-y-0.5 hover:border-line-2 hover:shadow-[0_10px_30px_-12px_rgba(34,211,238,.35)]">
+    <button
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onClick={onClick}
+      className={clsx(
+        'group block w-full cursor-grab rounded-xl border border-line bg-surface-2/70 p-3 text-left transition active:cursor-grabbing hover:-translate-y-0.5 hover:border-line-2 hover:shadow-[0_10px_30px_-12px_rgba(34,211,238,.35)]',
+        arrastando && 'scale-[.98] opacity-40',
+      )}
+    >
       <div className="flex items-center justify-between">
         <span className="num rounded px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: `${o.cor}1f`, color: o.cor }}>{o.id}</span>
         <span className="text-[10px] text-ink-3">{o.nicho}</span>
@@ -121,7 +222,7 @@ function CardOferta({ o, m, onClick }: { o: Oferta; m: Metricas; onClick: () => 
   )
 }
 
-function Detalhe({ o, onClose }: { o: Oferta; onClose: () => void }) {
+function Detalhe({ o, onClose, onMover }: { o: Oferta; onClose: () => void; onMover: (st: OfertaStatus) => void }) {
   const { imposto } = useApp()
   const p30 = { inicio: isoDate(addDays(parseDate(isoDate(new Date())), -29)), fim: isoDate(new Date()) }
   const m = metricasOferta(o.id, p30, imposto)
@@ -145,6 +246,21 @@ function Detalhe({ o, onClose }: { o: Oferta; onClose: () => void }) {
             <p className="mt-1 text-sm text-ink-2">{o.promessa}</p>
           </div>
           <button onClick={onClose} className="rounded-lg border border-line p-2 text-ink-2 hover:text-ink"><X size={16} /></button>
+        </div>
+
+        <div className="mt-4">
+          <div className="mb-1.5 text-[11px] tracking-[0.1em] text-ink-3 uppercase">Mover para</div>
+          <div className="flex flex-wrap gap-1.5">
+            {colunas.map((st) => (
+              <button
+                key={st}
+                onClick={() => onMover(st)}
+                className={clsx('rounded-full border px-3 py-1 text-xs transition', o.status === st ? 'border-cyan/50 bg-cyan/15 text-cyan' : 'border-line text-ink-2 hover:text-ink')}
+              >
+                {statusLabel(st)}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -231,6 +347,77 @@ function Info({ icon: Icon, label, v }: { icon: typeof Target; label: string; v:
     <div className="rounded-xl border border-line bg-surface/60 p-3">
       <div className="flex items-center gap-1.5 text-[11px] text-ink-3"><Icon size={12} className="text-cyan" />{label}</div>
       <div className="mt-1 text-sm text-ink">{v}</div>
+    </div>
+  )
+}
+
+const cores = ['#22d3ee', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#38bdf8', '#c084fc', '#a3e635', '#f472b6', '#2dd4bf']
+
+function NovaOferta({ onClose, onSalvar }: { onClose: () => void; onSalvar: (o: Oferta) => Promise<string | void> }) {
+  const proximo = useMemo(() => {
+    const n = Math.max(0, ...ofertas.map((o) => Number(o.id.replace(/\D/g, '')) || 0)) + 1
+    return `OF${String(n).padStart(2, '0')}`
+  }, [])
+  const [f, setF] = useState({ nome: '', nicho: '', ticket: '', promessa: '', angulo: '', produtoOrigem: '', fonteValidacao: '', status: 'ideia' as OfertaStatus })
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const ticket = Number(f.ticket.replace(',', '.')) || 0
+  const input = 'mt-1.5 w-full rounded-xl border border-line bg-bg/70 px-3 py-2.5 text-sm outline-none focus:border-cyan/60 focus:shadow-[0_0_0_3px_rgba(34,211,238,.12)]'
+  const campo = (k: keyof typeof f, label: string, ph = '') => (
+    <label htmlFor={`of-${k}`} className="block text-xs text-ink-2">
+      {label}
+      <input id={`of-${k}`} className={input} value={f[k]} placeholder={ph} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+    </label>
+  )
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <form
+        className="panel panel-glow w-full max-w-lg p-6"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={async (e) => {
+          e.preventDefault()
+          if (!f.nome.trim()) return
+          setSalvando(true)
+          const r = await onSalvar({
+            id: proximo, nome: f.nome.trim(), nicho: f.nicho.trim(), ticket, promessa: f.promessa.trim(), angulo: f.angulo.trim(),
+            produtoOrigem: f.produtoOrigem.trim(), fonteValidacao: f.fonteValidacao.trim(), status: f.status,
+            cor: cores[ofertas.length % cores.length], criadaEm: isoDate(new Date()),
+          })
+          setSalvando(false)
+          if (r) setErro(r)
+        }}
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <h3 className="font-display text-lg font-semibold">Nova oferta <span className="num ml-1 text-sm text-cyan">{proximo}</span></h3>
+          <button type="button" onClick={onClose} className="text-ink-3 hover:text-ink"><X size={18} /></button>
+        </div>
+        <div className="space-y-3.5">
+          {campo('nome', 'Nome da oferta', 'Ex.: Detox 7 Dias')}
+          <div className="grid grid-cols-2 gap-3">
+            {campo('nicho', 'Nicho', 'Saúde')}
+            {campo('ticket', 'Ticket (R$)', '19,90')}
+          </div>
+          {campo('produtoOrigem', 'Produto validado de origem', 'O que inspirou a remodelagem')}
+          {campo('fonteValidacao', 'Fonte da validação', 'Link ou onde viu escalando')}
+          {campo('promessa', 'Promessa', 'O resultado que a oferta vende')}
+          {campo('angulo', 'Ângulo', 'Dor, desejo, curiosidade…')}
+          <div>
+            <div className="text-xs text-ink-2">Etapa</div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {colunas.map((st) => (
+                <button type="button" key={st} onClick={() => setF({ ...f, status: st })} className={clsx('rounded-full border px-3 py-1 text-xs', f.status === st ? 'border-cyan/50 bg-cyan/15 text-cyan' : 'border-line text-ink-2')}>
+                  {statusLabel(st)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {erro && <p className="mt-3 text-xs text-rose">{erro}</p>}
+        <button disabled={!f.nome.trim() || salvando} className="mt-6 w-full rounded-xl bg-cyan py-2.5 text-sm font-semibold text-bg disabled:opacity-40">
+          {salvando ? 'Salvando…' : 'Criar oferta'}
+        </button>
+        <p className="mt-2.5 text-center text-[11px] text-ink-3">Use o código <span className="num text-cyan">[{proximo}]</span> no nome das campanhas desta oferta no Meta.</p>
+      </form>
     </div>
   )
 }
