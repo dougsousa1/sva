@@ -22,12 +22,13 @@ export type CriativoTipo = 'video' | 'imagem' | 'carrossel'
 
 export interface Criativo {
   id: string // CR014
-  ofertaId: string
+  ofertaId: string | null
   tipo: CriativoTipo
   gancho: string
   versao: number
   ferramenta: string
   duracao?: number
+  thumbnailUrl?: string | null
   criadoEm: string
 }
 
@@ -95,15 +96,16 @@ export interface Aparelho {
 }
 
 export interface Venda {
-  id: number
+  id: string | number
   data: string // ISO com horário
   valor: number
   ofertaId: string
   anuncioId: string | null
   chipId: string
+  instancia?: string | null
   ddd: string
   cliente: string
-  origem: 'approved_sale' | 'ai_receipt' | 'manual'
+  origem: string
 }
 
 export type DespesaCategoria = 'chips' | 'aparelhos' | 'plataforma' | 'ia' | 'outros'

@@ -1,7 +1,8 @@
 import clsx from 'clsx'
 import { CheckCircle2, ChevronDown, ChevronRight, Link2, Megaphone, TriangleAlert } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
-import { campanhas, contas } from '../data/mock'
+import { campanhas, contas, ofertas } from '../data/mock'
+import { supabase } from '../lib/supabase'
 import type { MetaStatus } from '../data/types'
 import { useApp } from '../lib/app-context'
 import { money, money0, num, x2 } from '../lib/format'
@@ -16,7 +17,7 @@ function soma(xs: MetricasAnuncio[]) {
 }
 
 export default function Campanhas() {
-  const { periodo, imposto } = useApp()
+  const { periodo, imposto, modo } = useApp()
   const [abertas, setAbertas] = useState<Set<string>>(() => new Set(campanhas.filter((c) => c.status === 'ativo').slice(0, 2).map((c) => c.id)))
   const [soAtivas, setSoAtivas] = useState(true)
   const ads = useMemo(() => new Map(metricasAnuncios(periodo, imposto).map((a) => [a.info.anuncio.id, a])), [periodo, imposto])
@@ -92,7 +93,9 @@ export default function Campanhas() {
                           <span className="font-medium text-ink">{camp.nome}</span>
                         </div>
                       </td>
-                      <td className="px-4"><OfertaTag id={camp.ofertaId} nome={false} /></td>
+                      <td className="px-4" onClick={(e) => e.stopPropagation()}>
+                        {camp.ofertaId || modo === 'demo' ? <OfertaTag id={camp.ofertaId} nome={false} /> : <Vincular campanhaId={camp.id} />}
+                      </td>
                       <td className="px-4"><Pill tone={stTone[camp.status]}>{camp.status}</Pill></td>
                       <td className="num px-4 text-right">{money0(camp.conjuntos.reduce((t, c) => t + c.orcamentoDia, 0))}</td>
                       <Linha s={s} />
@@ -138,5 +141,25 @@ function Linha({ s }: { s: ReturnType<typeof soma> }) {
       <td className={clsx('num px-4 text-right', s.roas >= 1.6 ? 'text-emerald' : s.roas >= 1.2 ? 'text-amber' : s.g ? 'text-rose' : 'text-ink-3')}>{x2(s.roas)}</td>
       <td className="num px-4 text-right text-ink-2">{s.v ? money(s.cpa) : '—'}</td>
     </>
+  )
+}
+
+/** Liga uma campanha fora do padrão [OFxx] a uma oferta (grava no banco). */
+function Vincular({ campanhaId }: { campanhaId: string }) {
+  const { recarregar } = useApp()
+  return (
+    <select
+      defaultValue=""
+      aria-label="Vincular a uma oferta"
+      onChange={async (e) => {
+        if (!supabase || !e.target.value) return
+        await supabase.from('meta_campanhas').update({ oferta_id: e.target.value }).eq('id', campanhaId)
+        await recarregar()
+      }}
+      className="rounded-md border border-amber/40 bg-amber/10 px-1.5 py-0.5 text-[11px] text-amber outline-none"
+    >
+      <option value="">vincular…</option>
+      {ofertas.map((o) => <option key={o.id} value={o.id}>{o.id} · {o.nome}</option>)}
+    </select>
   )
 }

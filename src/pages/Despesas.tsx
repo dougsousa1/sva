@@ -5,6 +5,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { despesas as base } from '../data/mock'
 import type { Despesa, DespesaCategoria } from '../data/types'
 import { useApp } from '../lib/app-context'
+import { supabase } from '../lib/supabase'
 import { TODAY_ISO } from '../lib/date'
 import { dataCurta, money, money0 } from '../lib/format'
 import { inPeriodo, metricasGerais } from '../lib/metrics'
@@ -21,7 +22,7 @@ const cats: Record<DespesaCategoria | 'trafego' | 'imposto', { l: string; c: str
 }
 
 export default function Despesas() {
-  const { periodo, imposto } = useApp()
+  const { periodo, imposto, modo, recarregar } = useApp()
   const [extras, setExtras] = useState<Despesa[]>([])
   const [form, setForm] = useState(false)
   const todas = useMemo(() => [...extras, ...base], [extras])
@@ -98,12 +99,24 @@ export default function Despesas() {
         </Panel>
       </div>
 
-      {form && <NovaDespesa onClose={() => setForm(false)} onSave={(d) => { setExtras((x) => [d, ...x]); setForm(false) }} />}
+      {form && <NovaDespesa onClose={() => setForm(false)} onSave={async (d) => {
+        if (modo === 'live' && supabase) {
+          const { error } = await supabase.from('despesas').insert({ data: d.data, categoria: d.categoria, descricao: d.descricao, valor: d.valor, tipo: d.tipo })
+          if (error) return error.message
+          setForm(false)
+          await recarregar()
+          return
+        }
+        setExtras((x) => [d, ...x])
+        setForm(false)
+      }} />}
     </>
   )
 }
 
-function NovaDespesa({ onClose, onSave }: { onClose: () => void; onSave: (d: Despesa) => void }) {
+function NovaDespesa({ onClose, onSave }: { onClose: () => void; onSave: (d: Despesa) => Promise<string | void> }) {
+  const { modo } = useApp()
+  const [erro, setErro] = useState('')
   const [descricao, setDescricao] = useState('')
   const [valor, setValor] = useState('')
   const [categoria, setCategoria] = useState<DespesaCategoria>('chips')
@@ -117,7 +130,7 @@ function NovaDespesa({ onClose, onSave }: { onClose: () => void; onSave: (d: Des
       <form
         className="panel panel-glow w-full max-w-md p-6"
         onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => { e.preventDefault(); if (ok) onSave({ id: `NEW${Date.now()}`, data, categoria, descricao, valor: v, tipo }) }}
+        onSubmit={async (e) => { e.preventDefault(); if (ok) setErro((await onSave({ id: `NEW${Date.now()}`, data, categoria, descricao, valor: v, tipo })) ?? '') }}
       >
         <div className="mb-5 flex items-center justify-between">
           <h3 className="font-display text-lg font-semibold">Lançar despesa</h3>
@@ -143,7 +156,8 @@ function NovaDespesa({ onClose, onSave }: { onClose: () => void; onSave: (d: Des
           </div>
         </div>
         <button disabled={!ok} className="mt-6 w-full rounded-xl bg-cyan py-2.5 text-sm font-semibold text-bg disabled:opacity-40">Salvar</button>
-        <p className="mt-2.5 text-center text-[11px] text-ink-3">Modo demonstração: fica só nesta sessão até ligarmos o banco.</p>
+        {erro && <p className="mt-2.5 text-center text-xs text-rose">{erro}</p>}
+        {modo === 'demo' && <p className="mt-2.5 text-center text-[11px] text-ink-3">Modo demonstração: fica só nesta sessão até ligarmos o banco.</p>}
       </form>
     </div>
   )

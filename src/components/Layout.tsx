@@ -6,15 +6,20 @@ import {
   Clapperboard,
   LayoutDashboard,
   Lightbulb,
+  Loader2,
+  LogOut,
   Megaphone,
   Receipt,
+  RefreshCw,
   Settings,
   Smartphone,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { PRESETS, useApp } from '../lib/app-context'
+import { campanhas, vendas } from '../data/mock'
 import { gerarAlertas } from '../lib/metrics'
+import { supabase } from '../lib/supabase'
 import { Segmented } from './ui'
 
 const nav = [
@@ -54,8 +59,49 @@ function Relogio() {
   return <span className="num text-xs text-ink-2">{t.toLocaleTimeString('pt-BR')}</span>
 }
 
+function BotaoSync() {
+  const { recarregar } = useApp()
+  const [estado, setEstado] = useState<'parado' | 'rodando' | 'erro'>('parado')
+  const [msg, setMsg] = useState('')
+  return (
+    <button
+      title={msg || 'Puxar agora os dados do Meta (últimos 30 dias)'}
+      disabled={estado === 'rodando'}
+      onClick={async () => {
+        if (!supabase) return
+        setEstado('rodando')
+        const { data, error } = await supabase.functions.invoke('meta-sync', { body: { dias: 30 } })
+        if (error || !data?.ok) {
+          setEstado('erro')
+          setMsg(error?.message ?? data?.erro ?? 'falhou')
+          return
+        }
+        setMsg(`${data.anuncios} anúncios · ${data.insights} linhas de insights`)
+        await recarregar()
+        setEstado('parado')
+      }}
+      className={clsx(
+        'flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] transition',
+        estado === 'erro' ? 'border-rose/30 text-rose' : 'border-line text-ink-2 hover:text-ink',
+      )}
+    >
+      {estado === 'rodando' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+      {estado === 'rodando' ? 'Sincronizando…' : estado === 'erro' ? 'Erro no sync' : 'Sincronizar Meta'}
+    </button>
+  )
+}
+
 export default function Layout() {
-  const { preset, setPreset, imposto } = useApp()
+  const { preset, setPreset, imposto, modo, versao, sair } = useApp()
+  const integracoes: [string, string, boolean][] =
+    modo === 'demo'
+      ? [['Meta Ads API', 'aguardando', false], ['Leona webhook', 'aguardando', false], ['Telegram bot', 'aguardando', false], ['Supabase', 'aguardando', false]]
+      : [
+          ['Meta Ads API', campanhas.length ? 'conectado' : 'sem dados', campanhas.length > 0],
+          ['Leona webhook', vendas.length ? 'recebendo' : 'sem vendas', vendas.length > 0],
+          ['Telegram bot', 'aguardando', false],
+          ['Supabase', 'conectado', true],
+        ]
   const alertas = useMemo(() => gerarAlertas(imposto), [imposto])
   const criticos = alertas.filter((a) => a.nivel === 'critico').length
   const loc = useLocation()
@@ -96,17 +142,15 @@ export default function Layout() {
         </nav>
         <div className="m-3 rounded-xl border border-line bg-surface/60 p-3.5">
           <div className="mb-2.5 text-[10px] font-medium tracking-[0.14em] text-ink-3 uppercase">Integrações</div>
-          {[
-            ['Meta Ads API', 'aguardando token'],
-            ['Leona webhook', 'aguardando'],
-            ['Telegram bot', 'aguardando'],
-            ['Supabase', 'depois'],
-          ].map(([n, s]) => (
+          {integracoes.map(([n, s, ok]) => (
             <div key={n} className="flex items-center justify-between py-1 text-xs">
               <span className="text-ink-2">{n}</span>
-              <span className="flex items-center gap-1.5 text-amber"><span className="h-1.5 w-1.5 rounded-full bg-amber" />{s}</span>
+              <span className={clsx('flex items-center gap-1.5', ok ? 'text-emerald' : 'text-amber')}><span className={clsx('h-1.5 w-1.5 rounded-full', ok ? 'bg-emerald' : 'bg-amber')} />{s}</span>
             </div>
           ))}
+          {modo === 'live' && (
+            <button onClick={sair} className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-line py-1.5 text-[11px] text-ink-3 hover:text-ink"><LogOut size={12} /> Sair</button>
+          )}
         </div>
       </aside>
 
@@ -115,10 +159,19 @@ export default function Layout() {
         <header className="sticky z-20 border-b border-line bg-bg/75 backdrop-blur-xl" style={{ top: "env(safe-area-inset-top, 0px)" }}>
           <div className="flex items-center gap-3 px-4 py-3 md:px-8">
             <div className="lg:hidden"><Logo /></div>
-            <div className="hidden items-center gap-2 rounded-lg border border-amber/25 bg-amber/5 px-2.5 py-1 text-[11px] text-amber md:flex">
-              <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-amber text-amber" />
-              MODO DEMONSTRAÇÃO · dados simulados
-            </div>
+            {modo === 'demo' ? (
+              <div className="hidden items-center gap-2 rounded-lg border border-amber/25 bg-amber/5 px-2.5 py-1 text-[11px] text-amber md:flex">
+                <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-amber text-amber" />
+                MODO DEMONSTRAÇÃO · dados simulados
+              </div>
+            ) : (
+              <div className="hidden items-center gap-2 md:flex">
+                <div className="flex items-center gap-2 rounded-lg border border-emerald/25 bg-emerald/5 px-2.5 py-1 text-[11px] text-emerald">
+                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald text-emerald" /> AO VIVO
+                </div>
+                <BotaoSync />
+              </div>
+            )}
             <div className="ml-auto flex items-center gap-3">
               <div className="hidden sm:block"><Segmented value={preset} options={PRESETS} onChange={setPreset} /></div>
               <Relogio />
@@ -147,7 +200,7 @@ export default function Layout() {
         </header>
 
         <main className="mx-auto max-w-[1500px] px-4 py-6 md:px-8 md:py-8">
-          <Outlet />
+          <Outlet key={versao} />
         </main>
       </div>
     </div>

@@ -1,4 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import Login, { Carregando } from '../components/Login'
+import { carregarAoVivo } from '../data/live'
+import { supabase } from './supabase'
 import { addDays, isoDate, TODAY } from './date'
 import type { Periodo } from './metrics'
 
@@ -34,6 +37,12 @@ interface Ctx {
   periodo: Periodo
   imposto: number
   setImposto: (v: number) => void
+  /** 'demo' = dados simulados; 'live' = Supabase */
+  modo: 'demo' | 'live'
+  /** muda sempre que os dados são recarregados (usado como key para remontar as telas) */
+  versao: number
+  recarregar: () => Promise<void>
+  sair: () => Promise<void>
 }
 
 const AppCtx = createContext<Ctx | null>(null)
@@ -49,7 +58,36 @@ function lerPreset(): Preset {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [preset, setPresetState] = useState<Preset>(lerPreset)
-  const [imposto, setImposto] = useState(0.13)
+  const [imposto, setImpostoState] = useState(0.13)
+  const [versao, setVersao] = useState(0)
+  const [estado, setEstado] = useState<'pronto' | 'login' | 'carregando' | 'erro'>(supabase ? 'carregando' : 'pronto')
+  const [erro, setErro] = useState('')
+
+  const recarregar = useCallback(async () => {
+    if (!supabase) return
+    try {
+      const r = await carregarAoVivo(supabase)
+      setImpostoState(r.imposto)
+      setVersao((v) => v + 1)
+      setEstado('pronto')
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e))
+      setEstado('erro')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) return
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) recarregar()
+      else setEstado('login')
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((ev) => {
+      if (ev === 'SIGNED_OUT') setEstado('login')
+    })
+    return () => sub.subscription.unsubscribe()
+  }, [recarregar])
+
   const value = useMemo<Ctx>(
     () => ({
       preset,
@@ -63,10 +101,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
       periodo: periodoDe(preset),
       imposto,
-      setImposto,
+      setImposto: (v) => {
+        setImpostoState(v)
+        supabase?.from('configuracoes').upsert({ chave: 'imposto_meta', valor: v }).then(() => undefined)
+      },
+      modo: supabase ? 'live' : 'demo',
+      versao,
+      recarregar,
+      sair: async () => {
+        await supabase?.auth.signOut()
+      },
     }),
-    [preset, imposto],
+    [preset, imposto, versao, recarregar],
   )
+
+  if (estado === 'login') return <Login onEntrar={() => { setEstado('carregando'); recarregar() }} />
+  if (estado === 'carregando') return <Carregando />
+  if (estado === 'erro') return <Carregando erro={erro} onTentar={() => { setEstado('carregando'); recarregar() }} />
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>
 }
 

@@ -7,7 +7,7 @@ import { chipById, criativoById, adIndex, inPeriodo } from '../lib/metrics'
 import { Kpi, OfertaTag, PageHeader, Panel, PanelHeader, Pill, Td, Th } from '../components/ui'
 
 export default function Vendas() {
-  const { periodo } = useApp()
+  const { periodo, modo } = useApp()
   const [q, setQ] = useState('')
   const lista = useMemo(() => vendas.filter((v) => inPeriodo(v.data, periodo)), [periodo])
   const filtrada = useMemo(() => {
@@ -30,7 +30,7 @@ export default function Vendas() {
         sub="Chegam pelo webhook da Leona com o source_id do anúncio — atribuição automática."
         right={
           <div className="flex items-center gap-2 rounded-xl border border-emerald/25 bg-emerald/5 px-3 py-2 text-xs text-emerald">
-            <Radio size={14} /> <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald text-emerald" /> webhook Leona (demo)
+            <Radio size={14} /> <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald text-emerald" /> {modo === 'demo' ? 'webhook Leona (demo)' : 'webhook Leona'}
           </div>
         }
       />
@@ -68,7 +68,7 @@ export default function Vendas() {
                       <Td className="max-w-[200px] truncate text-ink">{v.cliente}</Td>
                       <Td><OfertaTag id={v.ofertaId} nome={false} /></Td>
                       <Td className="text-xs">{cr ? <span className="text-ink-2"><span className="num text-ink-3">{cr.id}</span> {cr.gancho.slice(0, 30)}</span> : <Pill tone="amber">orgânico</Pill>}</Td>
-                      <Td className="text-xs text-ink-2">{chipById.get(v.chipId)?.nome}</Td>
+                      <Td className="text-xs text-ink-2">{chipById.get(v.chipId)?.nome ?? v.instancia ?? '—'}</Td>
                       <Td className="num text-xs text-ink-2">{v.ddd}</Td>
                       <Td right className="text-emerald">{money(v.valor)}</Td>
                     </tr>

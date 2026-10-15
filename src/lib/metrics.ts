@@ -2,7 +2,7 @@
 // Nível 1: margem por oferta = receita − tráfego c/ imposto − chips
 // Nível 2: lucro do período = Σ margens − fixos mensais − despesas pontuais (exceto chips)
 import { campanhas, chips, criativos, despesas, insights, ofertas, vendas } from '../data/mock'
-import type { Anuncio, Campanha, Chip, Conjunto } from '../data/types'
+import type { Anuncio, Campanha, Chip, Conjunto, Criativo, Oferta } from '../data/types'
 import { addDays, diffDays, isoDate, parseDate, TODAY_ISO } from './date'
 
 export interface Periodo {
@@ -26,19 +26,29 @@ export interface AdInfo {
   ofertaId: string | null
 }
 export const adIndex = new Map<string, AdInfo>()
-for (const campanha of campanhas)
-  for (const conjunto of campanha.conjuntos)
-    adIndex.set(conjunto.anuncio.id, { anuncio: conjunto.anuncio, conjunto, campanha, ofertaId: campanha.ofertaId })
+export const ofertaById = new Map<string, Oferta>()
+export const criativoById = new Map<string, Criativo>()
+export const chipById = new Map<string, Chip>()
 
-export const ofertaById = new Map(ofertas.map((o) => [o.id, o]))
-export const criativoById = new Map(criativos.map((c) => [c.id, c]))
-export const chipById = new Map(chips.map((c) => [c.id, c]))
+/** Recria os índices — chamado na carga inicial e sempre que os dados mudam (modo ao vivo). */
+export function rebuildIndexes() {
+  adIndex.clear()
+  for (const campanha of campanhas)
+    for (const conjunto of campanha.conjuntos)
+      adIndex.set(conjunto.anuncio.id, { anuncio: conjunto.anuncio, conjunto, campanha, ofertaId: campanha.ofertaId })
+  ofertaById.clear()
+  for (const o of ofertas) ofertaById.set(o.id, o)
+  criativoById.clear()
+  for (const c of criativos) criativoById.set(c.id, c)
+  chipById.clear()
+  for (const c of chips) chipById.set(c.id, c)
+  const caidos = chips.filter((c) => c.queda && c.ativacao)
+  VIDA_MEDIA_CHIP = caidos.length ? caidos.reduce((s, c) => s + diffDays(c.ativacao!, c.queda!), 0) / caidos.length : 8
+}
 
 // ---------------------------------------------------------------- chips
-const caidos = chips.filter((c) => c.queda && c.ativacao)
-export const VIDA_MEDIA_CHIP = caidos.length
-  ? caidos.reduce((s, c) => s + diffDays(c.ativacao!, c.queda!), 0) / caidos.length
-  : 8
+export let VIDA_MEDIA_CHIP = 8
+rebuildIndexes()
 
 export function vidaChip(c: Chip): number {
   if (!c.ativacao) return 0

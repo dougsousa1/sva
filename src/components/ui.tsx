@@ -148,9 +148,9 @@ export function OfertaTag({ id, nome = true }: { id: string | null; nome?: boole
 
 /** Miniatura gerada do criativo (até termos os arquivos reais do Meta). */
 export function Thumb({ c, className }: { c: Criativo; className?: string }) {
-  const o = ofertaById.get(c.ofertaId)
+  const o = c.ofertaId ? ofertaById.get(c.ofertaId) : undefined
   const cor = o?.cor ?? '#22d3ee'
-  const seed = parseInt(c.id.slice(2), 10)
+  const seed = parseInt(c.id.replace(/\D/g, '').slice(-4) || '7', 10)
   const Icon = c.tipo === 'video' ? Film : c.tipo === 'carrossel' ? Layers : ImageIcon
   return (
     <div
@@ -159,6 +159,8 @@ export function Thumb({ c, className }: { c: Criativo; className?: string }) {
         background: `radial-gradient(120% 80% at ${20 + (seed * 37) % 60}% ${10 + (seed * 53) % 40}%, ${cor}55, transparent 60%), radial-gradient(90% 70% at ${80 - (seed * 29) % 50}% 100%, #a78bfa40, transparent 60%), #0b0f1a`,
       }}
     >
+      {c.thumbnailUrl && <img src={c.thumbnailUrl} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />}
+      {c.thumbnailUrl && <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />}
       <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.08)_1px,transparent_1px)] [background-size:14px_14px]" />
       <div className="absolute inset-x-3 bottom-3">
         <p className="line-clamp-3 font-display text-[13px] leading-snug font-semibold text-white drop-shadow">{c.gancho}</p>
