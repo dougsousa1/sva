@@ -3,9 +3,10 @@
 // Funciona em duas etapas, porque a coleta no Apify leva alguns minutos:
 //   {"acao": "buscar", "palavra_id"?: "..."} → inicia as coletas (todas as palavras ativas, ou uma)
 //   {"acao": "coletar"}                        → baixa as coletas que já terminaram e grava os anúncios
-//   {"acao": "auto"} (padrão, para o Cron)      → coleta o que terminou e, 1x por dia, inicia novas buscas
+//   {"acao": "auto"} (padrão, para o Cron)      → coleta o que terminou e, 2x por semana, inicia novas buscas
 //
-// Secrets: APIFY_TOKEN, SYNC_SECRET  (opcional: APIFY_ACTOR, padrão apify~facebook-ads-scraper)
+// Secrets: APIFY_TOKEN, SYNC_SECRET  (opcionais: APIFY_ACTOR, padrão apify~facebook-ads-scraper;
+//          RADAR_INTERVALO_HORAS, padrão 84 = 2x por semana)
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const cors = {
@@ -168,8 +169,10 @@ async function coletar() {
 
 async function auto() {
   const coleta = await coletar()
-  const ontem = new Date(Date.now() - 20 * 3_600_000).toISOString()
-  const { data: vencidas } = await supabase.from('radar_palavras').select('id').eq('ativo', true).or(`ultima_busca.is.null,ultima_busca.lt.${ontem}`)
+  // Intervalo entre buscas automáticas: padrão 84 h (2x por semana), para caber no crédito grátis do Apify
+  const horas = Number(Deno.env.get('RADAR_INTERVALO_HORAS') ?? 84) || 84
+  const limite = new Date(Date.now() - horas * 3_600_000).toISOString()
+  const { data: vencidas } = await supabase.from('radar_palavras').select('id').eq('ativo', true).or(`ultima_busca.is.null,ultima_busca.lt.${limite}`)
   const iniciadas: string[] = []
   for (const p of vencidas ?? []) iniciadas.push(...(await buscar(p.id)))
   return { ...coleta, iniciadas }

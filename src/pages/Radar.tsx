@@ -90,7 +90,7 @@ export default function Radar() {
     <>
       <PageHeader
         title="Radar de ofertas"
-        sub="Garimpa a Biblioteca de Anúncios (Brasil, só ativos) e dá nota para o que já está validado: tempo no ar, variações e funil por WhatsApp."
+        sub="Garimpa a Biblioteca de Anúncios (Brasil, só ativos, 2x por semana) e dá nota para o que já está validado: tempo no ar, variações e funil por WhatsApp."
         right={
           modo === 'live' ? (
             <div className="flex flex-col items-end gap-1">

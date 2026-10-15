@@ -89,6 +89,6 @@ Com isso eu configuro o sistema, publico na Vercel e te mando o link com login.
 5. **Edge Functions → Secrets**: `APIFY_TOKEN` = o token do Apify.
 6. **Edge Functions → Deploy a new function → Via Editor**, nome `radar-sync`, código de [`supabase/functions/radar-sync/index.ts`](../supabase/functions/radar-sync/index.ts). Desligue **Verify JWT**.
 7. **Integrations → Cron → Create job**: nome `radar-sync`, agendamento `0 * * * *`, Edge Function `radar-sync` (POST), header `x-sync-secret` = seu `SYNC_SECRET`, body `{"acao": "auto"}`.
-   Ele baixa as coletas prontas e, 1x por dia, busca de novo cada palavra-chave ativa.
+   Ele baixa as coletas prontas e, 2x por semana, busca de novo cada palavra-chave ativa.
 
-Custo: cada palavra busca até 20 anúncios por dia (ajustável). Acompanhe em **Apify → Billing** depois da primeira semana.
+Custo: o robô cobra US$ 5,80 por 1.000 anúncios. Cada palavra busca até 20 anúncios, 2x por semana (≈170/mês) — com o crédito grátis de US$ 5, cabem 3–5 palavras. Mude a frequência com o secret `RADAR_INTERVALO_HORAS`. Acompanhe em **Apify → Billing**.
