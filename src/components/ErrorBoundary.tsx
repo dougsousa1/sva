@@ -6,16 +6,23 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, { 
   static getDerivedStateFromError(erro: Error) {
     return { erro }
   }
+  componentDidCatch(erro: Error, info: { componentStack?: string | null }) {
+    this.pilha = (info.componentStack ?? '').split('\n').filter(Boolean).slice(0, 6).join('\n')
+    this.forceUpdate()
+    console.error(erro)
+  }
+  pilha = ''
   render() {
     if (!this.state.erro) return this.props.children
     return (
-      <div className="panel mx-auto max-w-xl p-6">
+      <div className="panel mx-auto my-6 max-w-xl p-6">
         <h2 className="font-display text-lg font-semibold text-rose">Esta tela encontrou um erro</h2>
         <p className="mt-2 text-sm text-ink-2">Tire um print desta mensagem e mande para o Claude:</p>
         <pre className="num mt-3 overflow-x-auto rounded-lg border border-line bg-bg/70 p-3 text-xs whitespace-pre-wrap text-ink-2">
           {this.state.erro.message}
           {'\n'}
           {(this.state.erro.stack ?? '').split('\n').slice(1, 4).join('\n')}
+          {this.pilha && `\n--\n${this.pilha}`}
         </pre>
         <button onClick={() => this.setState({ erro: null })} className="mt-4 rounded-xl border border-line px-4 py-2 text-sm text-ink-2 hover:text-ink">
           Tentar de novo
