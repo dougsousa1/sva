@@ -20,6 +20,7 @@ import { PRESETS, useApp } from '../lib/app-context'
 import { campanhas, vendas } from '../data/mock'
 import { gerarAlertas } from '../lib/metrics'
 import { supabase } from '../lib/supabase'
+import ErrorBoundary from './ErrorBoundary'
 import { Segmented } from './ui'
 
 const nav = [
@@ -200,7 +201,9 @@ export default function Layout() {
         </header>
 
         <main className="mx-auto max-w-[1500px] px-4 py-6 md:px-8 md:py-8">
-          <Outlet key={versao} />
+          <ErrorBoundary key={`${versao}-${loc.pathname}`}>
+            <Outlet key={versao} />
+          </ErrorBoundary>
         </main>
       </div>
     </div>
